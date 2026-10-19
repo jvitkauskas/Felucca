@@ -85,6 +85,8 @@ CC="${CC:-cc} -O1 -Wall -Wno-unused-function"
 fail=0
 run() { echo "== $1"; shift; "$@" || fail=1; }
 
+run "BLE S1: clean-room controller, records and advertising logic" sh tests/run_ble_s1_tests.sh
+
 $CC -o "$OUT/storage_test" tests/storage_test.c
 run "flash storage (A/B, torn writes)" "$OUT/storage_test"
 

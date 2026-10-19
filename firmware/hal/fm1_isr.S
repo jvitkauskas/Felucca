@@ -18,3 +18,8 @@
 
 	FM1_ISR isr_timer5, fm1_timer5_irq
 	FM1_ISR isr_alnk0, fm1_alnk0_irq
+
+#if FELUCCA_BLE
+	FM1_ISR isr_ble_rx, fm1_ble_rx_irq
+	FM1_ISR isr_ble_event, fm1_ble_event_irq
+#endif

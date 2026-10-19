@@ -1,10 +1,14 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* Serial console on the CDC-ACM function (FELUCCA_CDC=1): read-only
- * diagnostics. Runs in the main loop (cdc_task); usb_poll moves the bytes.
+ * diagnostics (and optional BLE S1 bench controls). Runs in the main loop (cdc_task); usb_poll moves the bytes.
  * The baud rate is ignored. Nothing here writes memory or flash; `uboot`
  * does what the SysEx soft key does. */
+#if FELUCCA_BLE
+#define CON_LINE 528u
+#else
 #define CON_LINE 64u
+#endif
 
 static struct {
     char line[CON_LINE];
@@ -339,10 +343,18 @@ static void con_params(void)
     }
 }
 
+#if FELUCCA_BLE
+#include "ble_console.c"
+#endif
+
 static void con_exec(const char *p)
 {
     if (con_word(&p, "help") || con_word(&p, "?"))
         con_puts("status  dbg  inp  crash  params  memr ADDR [LEN]  flr OFF [LEN]  uboot yes\r\n");
+#if FELUCCA_BLE
+    else if (con_word(&p, "ble"))
+        con_ble(p);
+#endif
     else if (con_word(&p, "status"))
         con_status();
     else if (con_word(&p, "dbg"))

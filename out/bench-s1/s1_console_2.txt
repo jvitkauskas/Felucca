@@ -1,0 +1,77 @@
+>>> ble
+ble
+BLE S1 full recipe; connections disabled
+frozen 0
+loop_iters_per_us_x1000 44999
+loop_ticks 53334
+clock 0 000001C1
+clock 1 00010400
+clock 2 00000006
+clock 3 00010200
+icfg_probe 030B0600 030B0600 030B0600 043F0700
+ticks_while_irq_masked 0
+error 0
+failure_stage 0
+calibration_1_record_2_self 1
+vm_status 1
+btif_status 1
+records_present 0x0000001F
+public_address_hci 58 65 67 8B 40 62
+configured_random_hci 00 00 00 00 00 00
+trim_crc 0x000063B7
+bringup_us 68714
+bringup_end_ticks 0x00F1728A
+first_hci_command_ticks 0x00F186BD
+step_us 1 58
+step_us 2 8
+step_us 3 4732
+step_us 4 18
+step_us 5 52636
+step_us 6 115
+step_us 7 7
+step_us 8 35
+step_us 9 10
+step_us 10 4625
+step_us 11 5003
+step_us 12 1161
+step_us 13 46
+step_us 14 46
+step_us 15 84
+enabled 1
+stopping 0
+driver_step 14
+driver_error 0
+commands 41
+replies 41
+last_opcode 0x0000200A
+last_status 0x00000000
+intake_rejected 0
+command_overflow 0
+advertising_events 480
+event_irqs 480
+rx_irqs 429
+scan_req 429
+connect_ignored 0
+bad_rx 0
+rx_max_ticks 198
+event_max_ticks 387
+rx_over_380us 0
+event_work_max_ticks 309
+event_work_over_150us 0
+ble_critical_max_ticks 6022
+ble_critical_over_390us 0
+worker_max_gap_us 29584
+stop_timeouts 0
+restarts 1
+enable_ticks 0x976C510D
+first_event_close_ticks 0x976DE249
+dma_base 0x01C709E0
+dma_end 0x01C716F8
+modem_base 0x01C716F8
+dma_canary_errors 0
+p33_timeouts 0
+trace_records 82
+trace_total 82
+trace_frozen_drops 0
+vco_limits 47 47 47 47 47 48 4B 52 59 60 67 6E 75 7C 84 8B 8F 86 86 86 86 86 86 87 8B 91 99 A1 A6 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 3F
+> 

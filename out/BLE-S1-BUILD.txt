@@ -1,0 +1,48 @@
+Felucca BLE S1 — 2026-10-19
+Worktree: /root/fm1/Felucca-ble
+Branch: ble-controller; all changes uncommitted
+Specification: frozen r2 plus authorized r2b S1 corrections; no live spec
+Build: FELUCCA_BLE=1 JIELI_TOOLCHAIN=/root/felucca-ble-env/jieli/toolchain AC79_SDK=/root/felucca-ble-env/sdk-min ./build.sh
+Optional random address: not overridden; provisioned public identity used if present
+Optional measured TX power: not supplied; HCI 2007 unsupported
+
+BLE-on app image: 442,216 / 581,564 B; free 139,348 B
+BLE-on static RAM (.data+.bss): 92,856 / 98,304 B; free 5,448 B
+BLE-on pool including DMA: 334,548 / 344,064 B; free 9,516 B (required >=8,192)
+BLE DMA: 4,340 B at 0x01C709E0 (3,352 BB + 972 modem + 16 canary)
+Advertising TX buffers: 2 x 40 = 80 B; no connection TX allocation in S1
+BLE trace: 20,480 B at 0x01C00B48, NOLOAD RAMTEXT tail
+RAMTEXT code: 2,888 B; unused RAMTEXT after trace: 1,208 B
+No Felucca feature or allocation was reduced.
+
+BLE-off app: 417,436 B; static RAM 89,688 B; pool 330,208 B
+BLE-off app SHA256: bbe649ac40d6573a548c52833bbd54cbe74957703732104e70b942853c8fa3ee
+BLE-off package SHA256: afa34f78b27e5568a5696407560d66eb038114b9e2d40f0bf68a0da26ebd9e5a
+Both hashes rechecked byte-identical to the pre-change stock build after r2b changes.
+
+BLE S1 package: out/felucca-ble-s1.fwsc (609,849 B)
+BLE S1 package SHA256: f98ea47c54bf09eac0b7dad4d6bbd367288308fa703786a7692e58f3611c5f19
+BLE S1 app SHA256: 270df043f0509221d736d74ece3a57748f8a68dbb9f2123c818b91f9f91872d6
+
+Validation:
+- Final target BLE-on and BLE-off builds: PASS
+- Optional measured-power + configured random identity target build: PASS
+- New C files: -Wall/-Wextra promoted to errors, clean
+- Register access confined to hal/: PASS
+- .ram_text: 909 instructions, no calls: PASS
+- New default and optional-power host variants with ASan/UBSan: PASS
+- Full existing Felucca host regression suite: ALL HOST TESTS PASSED
+- git diff --check and Python build-script syntax: PASS
+- External input manifest: 29 permitted files, hashes verified
+- Target render-cost budget on final BLE build: PASS (out/ble-s1-target-budget.log)
+
+r2b adoption: P0–P6 integration, masked attach, exact IRQ save/restore,
+24 MHz microsecond waits, throughput reported as iterations/us (not Hz),
+RX 380 us / event work 150 us / controller critical section 390 us diagnostics,
+80 B advertising TX, closing before stop and stop/quiesce/reclaim before CC.
+S3 persistent seed / new flash-write services are not part of S1.
+
+Not performed: flashing, device I/O, network-host access, scanner/RF acceptance.
+Open physical checks include actual core Hz and the BSP cumulative 390 us budget.
+See docs/BLE-S1.md for bench tests/recovery, docs/SPEC-GAPS-S1.md for all gaps,
+and docs/BLE-S1-AUDIT.md for the complete external input list.

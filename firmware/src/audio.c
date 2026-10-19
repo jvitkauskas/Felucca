@@ -58,7 +58,11 @@ static __attribute__((noinline)) uint32_t shed_check(uint32_t all)
     shed_over = (uint8_t)(shed_over << 1 | (all > SHED_TICKS));
     if ((shed_over & 3u) == 3u)
         shed_req = 1;
+#if FELUCCA_BLE
+    return (all - ble_audio_nested_snapshot) / FM1_TICKS_PER_US;
+#else
     return (all - t5_nested_ticks) / FM1_TICKS_PER_US;
+#endif
 }
 
 static void shed_voice(void)
@@ -98,10 +102,17 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
 {
     uint8_t p;
     uint32_t t0;
+#if FELUCCA_BLE
+    uint32_t ble_k = fm1_ble_irq_save();
+#endif
     felucca_dbg.in_audio = 1;                   /* first: TIMER5 nests from here on (main.c) */
     p = fm1_audio_pending();
     t0 = fm1_ticks();
     t5_nested_ticks = 0;
+#if FELUCCA_BLE
+    ble_audio_measuring = 1;
+    fm1_ble_irq_restore(ble_k);
+#endif
     fm1_audio_ack_aux(p);
     if (p & FM1_AUDIO_HALF) {
         uint32_t half = fm1_audio_free_half(), b, us;
@@ -121,7 +132,16 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
         }
         fm1_audio_ack_half();
         audio_halves++;
+#if FELUCCA_BLE
+        { uint32_t all, k = fm1_ble_irq_save();
+          all = fm1_ticks() - t0;
+          ble_audio_nested_snapshot = t5_nested_ticks;
+          ble_audio_measuring = 0;
+          fm1_ble_irq_restore(k);
+          us = shed_check(all); }
+#else
         us = shed_check(fm1_ticks() - t0);
+#endif
         if (us > audio_max_us)
             audio_max_us = us;
         {
@@ -137,6 +157,9 @@ void fm1_alnk0_irq(void)                       /* via isr_alnk0 (hal/fm1_isr.S) 
             felucca_dbg.max_us = us;
         felucca_dbg.cpu_q8 = song.cpu_q8;
     }
+#if FELUCCA_BLE
+    ble_audio_measuring = 0;
+#endif
     felucca_dbg.in_audio = 0;
 }
 extern void isr_alnk0(void);

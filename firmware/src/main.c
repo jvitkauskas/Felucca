@@ -18,7 +18,14 @@ extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
 void fm1_timer5_irq(void)
 {
     static uint32_t sub, owed;
+#if FELUCCA_BLE
+    uint32_t t0, k = fm1_ble_irq_save(), usb_due = sub % 5u == 0u;
+    ble_t5_active = 1;
+    t0 = fm1_ticks();
+    fm1_ble_irq_restore(k);
+#else
     uint32_t t0 = fm1_ticks(), usb_due = sub % 5u == 0u;
+#endif
     fm1_timer5_ack();
     felucca_dbg.timer_irqs++;
     fm1_input_tick();
@@ -45,7 +52,14 @@ void fm1_timer5_irq(void)
         if (usb_due)
             uac_service();
 #endif
+#if FELUCCA_BLE
+        { uint32_t k = fm1_ble_irq_save();
+          t5_nested_ticks += fm1_ticks() - t0;
+          ble_t5_active = 0;
+          fm1_ble_irq_restore(k); }
+#else
         t5_nested_ticks += fm1_ticks() - t0;
+#endif
         return;
     }
     if (owed & 1u)
@@ -55,6 +69,9 @@ void fm1_timer5_irq(void)
         uart_midi_poll();
 #endif
     owed = 0;
+#if FELUCCA_BLE
+    ble_t5_active = 0;
+#endif
 }
 extern void isr_timer5(void);
 
@@ -125,7 +142,13 @@ static void felucca_init(void)
 static void fm1_main(void)
 {
     int32_t knob = 512 * 16;
-    persist_boot();
+#if FELUCCA_BLE
+    uint8_t ble_boot_panel_pending=1;
+#endif
+    persist_boot();             /* P1 must be the first main call */
+#if FELUCCA_BLE
+    ble_platform_prepare();     /* P2: plain item reads, before audio_init */
+#endif
 #if FELUCCA_OTA
     if (flash_ok)
         ota_boot_cleanup();                             /* staging area left by an update */
@@ -158,9 +181,15 @@ static void fm1_main(void)
 #if FELUCCA_UART
     uart_midi_init();
 #endif
+#if FELUCCA_BLE
+    fm1_ble_attach();           /* P3: masked adapter, vector table writable */
+#endif
     timer5_start();
     fm1_guard_lock_top();
     fm1_irq_enable_all();
+#if FELUCCA_BLE
+    ble_platform_start();       /* P4 after P5; no instance or BLE IRQ yet */
+#else
     fm1_delay_ms(30);
     if ((fm1_in.buttons & 3u) == 3u) {
         panel_setup();                        /* OCT- + OCT+ held at power-on */
@@ -168,9 +197,22 @@ static void fm1_main(void)
     }
     fm1_delay_ms(400);
     lcd_fill(0, 0, 240, 240, T_BG);
-
+#endif
     for (;;) {
         uint32_t m = fm1_ms;
+#if FELUCCA_BLE
+        ble_platform_worker(); /* P6: first instance opens here */
+        if (ble_boot_panel_pending) {
+            ble_boot_panel_pending=0;
+            fm1_delay_ms(30);
+            if ((fm1_in.buttons & 3u) == 3u) {
+                panel_setup();
+                settings_save();
+            }
+            fm1_delay_ms(400);
+            lcd_fill(0, 0, 240, 240, T_BG);
+        }
+#endif
         fm1_wdt_feed();
         usb_retry(fm1_ms);
         if (fm1_ms > 30000u && bootguard.pending) {     /* a crash or hang in the first 30 s counts */
@@ -256,6 +298,9 @@ static void fm1_main(void)
         felucca_dbg.stage = 9;
         while (fm1_ms - m < 15u) {                               /* ~60 UI frames/s at most */
             ui_input();
+#if FELUCCA_BLE
+            ble_platform_worker();
+#endif
 #if FELUCCA_OTA
             ed_service();                       /* editor replies without waiting for the next frame */
 #endif

@@ -52,6 +52,7 @@ Build options (environment, `0` or `1`; defaults in `firmware/src/felucca.c`, `c
 
 | Flag | Default | |
 | --- | --- | --- |
+| `FELUCCA_BLE` | 0 | experimental clean-room BLE S1 advertising; needs FLASH and CDC; see `docs/BLE-S1.md` |
 | `FELUCCA_FLASH` | 1 | settings, presets and projects in flash |
 | `FELUCCA_OTA` | 1 | update entry (needs `FELUCCA_FLASH`) |
 | `FELUCCA_CDC` | 1 | USB serial console |

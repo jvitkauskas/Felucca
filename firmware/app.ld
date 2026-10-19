@@ -21,10 +21,14 @@ SECTIONS
     .text : { KEEP(*(.text.crt0)) *(.text*) *(.rodata*) . = ALIGN(4); _etext = .; } > XIP
     .ram_text : { _rt_start = .; KEEP(*(.ram_text*)) . = ALIGN(4); _rt_end = .; } > RAMTEXT AT > XIP
     _rt_load = LOADADDR(.ram_text);
+    .ble_trace (NOLOAD) : { . = ALIGN(4); _ble_trace_start = .; *(.ble_trace) _ble_trace_end = .; } > RAMTEXT
     .data : { . = ALIGN(4); _data_start = .; *(.data*) *(.sdata*) . = ALIGN(4); _data_end = .; } > RAM AT > XIP
     _data_load = LOADADDR(.data);
     .bss (NOLOAD) : { _bss_start = .; *(.bss*) *(.sbss*) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM
-    .pool (NOLOAD) : { _pool_start = .; *(.pool*) . = ALIGN(4); _pool_end = .; } > POOL
+    .pool (NOLOAD) : { _pool_start = .; *(.pool*) . = ALIGN(4); } > POOL
+    .ble_dma (NOLOAD) : { _ble_dma_start = .; *(.ble_dma) . = ALIGN(4); _ble_dma_end = .; _pool_end = .; } > POOL
+    ASSERT(_ble_trace_end <= ORIGIN(RAMTEXT) + LENGTH(RAMTEXT), "BLE trace exceeds RAMTEXT spare space")
+    ASSERT(_ble_dma_start >= 0x01C20000 && _ble_dma_end <= 0x01C74000, "BLE DMA outside verified SRAM class")
     .noinit (NOLOAD) : { *(.noinit*) } > NOINIT
     _guard0 = 0x01C74000; _ustack_lo = 0x01C74100; _ustack_top = 0x01C7A000;
     _guard1 = 0x01C7A000; _sstack_lo = 0x01C7A100; _sstack_top = 0x01C7C000;

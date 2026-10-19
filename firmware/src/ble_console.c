@@ -1,0 +1,149 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+#pragma clang diagnostic push
+#pragma clang diagnostic error "-Wall"
+#pragma clang diagnostic error "-Wextra"
+/* S1 bench interface over Felucca's CDC console. Main context only. */
+static ble_hw_diag_t ble_frozen_hw;
+static ble_diag_t ble_frozen_ctl;
+static uint8_t ble_console_frozen;
+
+static void con_ble_bytes(const uint8_t *p,unsigned n)
+{
+    unsigned i;
+    for (i=0;i<n;i++) { con_hex(p[i],2); if (i+1<n) con_putc(' '); }
+    con_puts("\r\n");
+}
+static void con_ble_status(void)
+{
+    ble_hw_diag_t hw;
+    ble_diag_t d;
+    unsigned i;
+    if (ble_console_frozen) { hw=ble_frozen_hw; d=ble_frozen_ctl; }
+    else {
+        uint32_t k=fm1_ble_irq_save(); hw=br_diag; fm1_ble_irq_restore(k);
+        ble_get_diag(&d);
+    }
+    con_puts("BLE S1 full recipe; connections disabled\r\n");
+    con_kv("frozen",ble_console_frozen);
+    con_kv("loop_iters_per_us_x1000",(int32_t)hw.loop_iters_per_us_x1000); con_kv("loop_ticks",(int32_t)hw.loop_ticks);
+    for (i=0;i<4;i++) { con_puts("clock "); con_dec((int32_t)i); con_putc(' '); con_hex(hw.clocks[i],8); con_puts("\r\n"); }
+    con_puts("icfg_probe ");
+    for (i=0;i<4;i++) { con_hex(hw.irq_probe[i],8); con_putc(i==3 ? '\r' : ' '); }
+    con_putc('\n');
+    con_kv("ticks_while_irq_masked",(int32_t)hw.irq_ticks_while_masked);
+    con_kv("error",(int32_t)hw.error); con_kv("failure_stage",(int32_t)hw.failure_stage); con_kv("calibration_1_record_2_self",(int32_t)hw.calibration);
+    con_kv("vm_status",ble_cal.vm_status); con_kv("btif_status",ble_cal.btif_status);
+    con_kx("records_present",ble_cal.present);
+    con_puts("public_address_hci "); con_ble_bytes(ble_cal.public_addr,6);
+    con_puts("configured_random_hci "); con_ble_bytes(ble_random_config,6);
+    con_kx("trim_crc",ble_get32(ble_cal.trim+64));
+    con_kv("bringup_us",(int32_t)(hw.bringup_ticks/24));
+    con_kx("bringup_end_ticks",hw.bringup_end_ticks);
+    con_kx("first_hci_command_ticks",d.first_command_ticks);
+    for (i=0;i<15;i++) { con_puts("step_us "); con_dec((int32_t)i+1); con_putc(' '); con_dec((int32_t)(hw.step_ticks[i]/24)); con_puts("\r\n"); }
+    con_kv("enabled",d.enabled); con_kv("stopping",d.stopping);
+    con_kv("driver_step",d.driver_step); con_kv("driver_error",d.driver_error);
+    con_kv("commands",(int32_t)d.commands); con_kv("replies",(int32_t)d.replies);
+    con_kx("last_opcode",d.last_opcode); con_kx("last_status",d.last_status);
+    con_kv("intake_rejected",(int32_t)d.rejected); con_kv("command_overflow",(int32_t)d.overflow);
+    con_kv("advertising_events",(int32_t)hw.adv_events);
+    con_kv("event_irqs",(int32_t)hw.event_irqs); con_kv("rx_irqs",(int32_t)hw.rx_irqs);
+    con_kv("scan_req",(int32_t)hw.scan_req); con_kv("connect_ignored",(int32_t)hw.connect_ignored);
+    con_kv("bad_rx",(int32_t)hw.bad_rx);
+    con_kv("rx_max_ticks",(int32_t)hw.rx_max_ticks); con_kv("event_max_ticks",(int32_t)hw.event_max_ticks);
+    con_kv("rx_over_380us",(int32_t)hw.irq_over_budget);
+    con_kv("event_work_max_ticks",(int32_t)hw.event_work_max_ticks);
+    con_kv("event_work_over_150us",(int32_t)hw.event_over_150us);
+    con_kv("ble_critical_max_ticks",(int32_t)hw.critical_max_ticks);
+    con_kv("ble_critical_over_390us",(int32_t)hw.critical_over_390us);
+    con_kv("worker_max_gap_us",(int32_t)(hw.worker_gap_ticks/24));
+    con_kv("stop_timeouts",(int32_t)hw.stop_timeouts); con_kv("restarts",(int32_t)hw.restarts);
+    con_kx("enable_ticks",hw.enable_ticks); con_kx("first_event_close_ticks",hw.first_event_ticks);
+    con_kx("dma_base",hw.dma_base); con_kx("dma_end",hw.dma_end); con_kx("modem_base",hw.modem_base);
+    con_kv("dma_canary_errors",(int32_t)hw.canary_errors); con_kv("p33_timeouts",(int32_t)hw.p33_timeouts);
+    con_kv("trace_records",(int32_t)ble_trace_size()); con_kv("trace_total",(int32_t)d.trace_count);
+    con_kv("trace_frozen_drops",(int32_t)d.trace_frozen_drops);
+    con_puts("vco_limits "); con_ble_bytes(hw.vco,48);
+}
+static int con_ble_hexbyte(const char **p,uint8_t *v)
+{
+    unsigned j,n=0;
+    const char *s=*p;
+    while (*s==' ' || *s==':') s++;
+    for (j=0;j<2;j++) {
+        char c=*s++;
+        unsigned d;
+        if (c>='0' && c<='9') d=(unsigned)(c-'0');
+        else if (c>='a' && c<='f') d=(unsigned)(c-'a'+10);
+        else if (c>='A' && c<='F') d=(unsigned)(c-'A'+10);
+        else return 0;
+        n=n*16+d;
+    }
+    *p=s; *v=(uint8_t)n; return 1;
+}
+static void con_ble(const char *p)
+{
+    if (con_word(&p,"rate")) {
+        br_clock_probe(); con_puts("loop throughput sampled; use ble for result (not Hz)\r\n");
+    } else if (con_word(&p,"pmu")) {
+        unsigned i;
+        for (i=0;i<38;i++) {
+            unsigned index=i<24 ? i : i<30 ? i-24+0x30 : i-30+0x70;
+            con_hex(index,2); con_putc(' '); con_hex(br_diag.p33_before[i],2);
+            con_putc(' '); con_hex(br_diag.p33_after[i],2); con_puts("\r\n");
+        }
+    } else if (con_word(&p,"regs")) {
+        uint32_t r[50]; unsigned i;
+        fm1_ble_readback(r);
+        con_puts("WLA0..30 WL0..7 WF0..9 BSB (live read)\r\n");
+        for (i=0;i<50;i++) { con_dec((int32_t)i); con_putc(' '); con_hex(r[i],8); con_puts("\r\n"); }
+    } else if (con_word(&p,"freeze")) {
+        uint32_t k=fm1_ble_irq_save();
+        ble_trace_freeze(1); ble_get_diag(&ble_frozen_ctl); ble_frozen_hw=br_diag;
+        ble_console_frozen=1; fm1_ble_irq_restore(k);
+        con_kv("frozen_records",(int32_t)ble_trace_size());
+    } else if (con_word(&p,"thaw")) {
+        ble_trace_freeze(0); ble_console_frozen=0; con_puts("trace running\r\n");
+    } else if (con_word(&p,"trace")) {
+        int ok,ok2; uint32_t start=con_num(&p,&ok),n=con_num(&p,&ok2),i;
+        if (!ok) start=0;
+        if (!ok2 || n>32) n=8;
+        if (!ble_console_frozen) { con_puts("ble freeze first\r\n"); return; }
+        for (i=0;i<n;i++) {
+            const ble_trace_t *r=ble_trace_record(start+i);
+            if (!r) break;
+            con_dec((int32_t)(start+i)); con_putc(' '); con_dec((int32_t)r->ms); con_putc(' ');
+            con_hex(r->dir_type,2); con_putc(' '); con_dec(r->len); con_putc(' ');
+            con_hex(r->intake,2); con_putc(' '); con_ble_bytes(r->data,r->len<32 ? r->len : 32);
+        }
+    } else if (con_word(&p,"adv")) {
+        ble_driver_start(0,ble_random_config); con_puts("ADV_IND startup queued\r\n");
+    } else if (con_word(&p,"nonconn")) {
+        ble_driver_start(3,ble_random_config); con_puts("ADV_NONCONN_IND startup queued\r\n");
+    } else if (con_word(&p,"random")) {
+        uint8_t addr[6]; unsigned i;
+        for (i=0;i<6;i++) if (!con_ble_hexbyte(&p,&addr[5-i])) break;
+        while (*p==' ') p++;
+        if (i!=6 || *p || !ble_random_valid(addr)) { con_puts("usage: ble random XX:XX:XX:XX:XX:XX (static, unique)\r\n"); return; }
+        memcpy(ble_random_config,addr,6); con_puts("RAM identity set; ble adv to start\r\n");
+    } else if (con_word(&p,"power")) {
+        int ok; uint32_t level=con_num(&p,&ok);
+        if (!ok || level>11) con_puts("usage: ble power 0..11\r\n");
+        else { ble_set_power((uint8_t)level); con_puts("power level queued\r\n"); }
+    } else if (con_word(&p,"stop")) {
+        static const uint8_t cmd[4]={10,32,1,0};
+        ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,cmd,4));
+    } else if (con_word(&p,"reset")) {
+        static const uint8_t cmd[3]={3,12,0};
+        ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,cmd,3));
+    } else if (con_word(&p,"hci")) {
+        uint8_t packet[BLE_HCI_MAX]; unsigned n=0;
+        while (*p==' ') p++;
+        while (*p && n<sizeof packet && con_ble_hexbyte(&p,&packet[n])) { n++; while (*p==' ') p++; }
+        if (*p) { con_puts("invalid hex or packet too long\r\n"); return; }
+        ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,packet,(uint16_t)n));
+    } else if (!*p) con_ble_status();
+    else con_puts("ble [rate|pmu|regs|adv|nonconn|stop|reset|power N|random ADDR|hci HEX|freeze|trace START N|thaw]\r\n");
+}
+
+#pragma clang diagnostic pop

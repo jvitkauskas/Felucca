@@ -1,0 +1,8 @@
+scan hits: 85
+cpu_pct 15 audio_max_us 677 audio_late 0 voices_shed 0 voices_given_up 0 playing 1 error 0 advertising_events 4896 scan_req 2997 rx_max_ticks 270 event_max_ticks 440 rx_over_380us 0 event_work_over_150us 0 ble_critical_over_390us 0 worker_max_gap_us 116087 stop_timeouts 0 dma_canary_errors 0 
+scan hits: 71
+cpu_pct 14 audio_max_us 677 audio_late 0 voices_shed 0 voices_given_up 0 playing 1 error 0 advertising_events 5035 scan_req 3117 rx_max_ticks 270 event_max_ticks 440 rx_over_380us 0 event_work_over_150us 0 ble_critical_over_390us 0 worker_max_gap_us 116087 stop_timeouts 0 dma_canary_errors 0 
+scan hits: 74
+cpu_pct 16 audio_max_us 677 audio_late 0 voices_shed 0 voices_given_up 0 playing 1 error 0 advertising_events 5175 scan_req 3244 rx_max_ticks 270 event_max_ticks 440 rx_over_380us 0 event_work_over_150us 0 ble_critical_over_390us 0 worker_max_gap_us 116087 stop_timeouts 0 dma_canary_errors 0 
+scan hits: 76
+cpu_pct 15 audio_max_us 691 audio_late 0 voices_shed 0 voices_given_up 0 playing 1 error 0 advertising_events 5315 scan_req 3359 rx_max_ticks 270 event_max_ticks 440 rx_over_380us 0 event_work_over_150us 0 ble_critical_over_390us 0 worker_max_gap_us 116087 stop_timeouts 0 dma_canary_errors 0 

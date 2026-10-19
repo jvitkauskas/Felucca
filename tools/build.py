@@ -180,10 +180,26 @@ def build_app():
     flags = [*CFLAGS, "-Ifirmware/hal", "-Ifirmware/src", "-Ibuild/gen"]
     for flag in ("FELUCCA_FLASH", "FELUCCA_OTA", "FELUCCA_OTA_DRYRUN", "FELUCCA_OTA_RAMONLY", "FELUCCA_CDC",
                  "FELUCCA_UART", "FELUCCA_UAC", "FELUCCA_UAC_TONE", "FELUCCA_ICONS", "FELUCCA_SLICE", "FELUCCA_FM4",
-                 "FELUCCA_CDC_DEFAULT"):
+                 "FELUCCA_CDC_DEFAULT", "FELUCCA_BLE"):
         v = os.environ.get(flag)    # unset: the default in firmware/src/felucca.c
         if v in ("0", "1"):
             flags.append(f"-D{flag}={v}")
+    ble = os.environ.get("FELUCCA_BLE") == "1"
+    extra = []
+    if ble:
+        dbm = os.environ.get("FELUCCA_BLE_TX_DBM")
+        if dbm is not None:
+            if not re.fullmatch(r"-?\d+", dbm) or not -127 <= int(dbm) <= 20:
+                raise SystemExit("FELUCCA_BLE_TX_DBM must be a measured integer in -127..20")
+            flags.append(f"-DFELUCCA_BLE_TX_DBM={dbm}")
+        addr = os.environ.get("FELUCCA_BLE_RANDOM_ADDRESS")
+        if addr:
+            if not re.fullmatch(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", addr):
+                raise SystemExit("FELUCCA_BLE_RANDOM_ADDRESS must be XX:XX:XX:XX:XX:XX")
+            octets = bytes.fromhex(addr.replace(":", ""))[::-1]
+            if octets[5] & 192 != 192 or int.from_bytes(octets, "little") & ((1 << 46)-1) in (0, (1 << 46)-1):
+                raise SystemExit("BLE random address must be a valid static random address")
+            flags.append("-DFELUCCA_BLE_RANDOM_BYTES=" + ",".join(str(b) for b in octets))
     v = os.environ.get("FELUCCA_USB_LAYOUT")   # firmware/src/usb.c: how the USB composite presents itself (#67), 0..3
     if v in ("0", "1", "2", "3"):
         flags.append(f"-DFELUCCA_USB_LAYOUT={v}")
@@ -198,16 +214,22 @@ def build_app():
              ("cc", *flags, "-c", FW / "src" / "felucca.c", "-o", OUT / "felucca.o"))
     tc_all(("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
            ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
-           ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
+           ("cc", *(["-DFELUCCA_BLE=1"] if ble else []), "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
            cmain)
     if size:
         subprocess.run([sys.executable, SRC / "tools" / "size_fns.py", OUT / "felucca.ll", OUT / "felucca_size.ll"],
                        check=True)
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
+    if ble:
+        for source in ("ble_logic", "ble_controller"):
+            obj = OUT / f"{source}.o"
+            tc("cc", *flags, "-Wextra", "-Werror", "-std=c11", "-Ifirmware/ble", "-c",
+               FW / "ble" / f"{source}.c", "-o", obj)
+            extra.append(obj)
     elf = OUT / "felucca.elf"
     tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
-       OUT / "felucca.o", "-o", elf)
+       OUT / "felucca.o", *extra, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)
     *_, syms, dis, rt = tc_all(("common/bin/objcopy", "-O", "binary", "-j", ".text", elf, OUT / "text.bin"),
@@ -266,6 +288,13 @@ def check(img, syms, dis, rt):
     bss = sym("_bss_end") - 0x01C08000
     pool = sym("_pool_end") - sym("_pool_start")
     notes.append(f"image {len(img)} B; RAM .data+.bss {bss} B of 98304; pool {pool} B of {0x54000}")
+    trace = sym("_ble_trace_end") - sym("_ble_trace_start")
+    dma = sym("_ble_dma_end") - sym("_ble_dma_start")
+    if dma or trace:
+        notes.append(f"BLE DMA {dma} B (included in pool); trace {trace} B in RAMTEXT tail; "
+                     f"RAMTEXT unused {0x6000 - (sym('_ble_trace_end') - 0x01C00000)} B")
+        if dma < 4322 or trace != 512 * 40:
+            errors.append("BLE DMA/trace reservation mismatch")
     if bss > 96 * 1024:
         errors.append("RAM region overflow")
     if 0x54000 - pool < 8192:                     # keep >= 8 KiB of the pool spare
@@ -303,7 +332,7 @@ def mmio_check():
             break
         regs |= more
     errors = []
-    for f in sorted([*(FW / "src").glob("*.[ch]"), *(FW / "loader").glob("*.c")]):
+    for f in sorted([*(FW / "src").glob("*.[ch]"), *(FW / "ble").glob("*.[ch]"), *(FW / "loader").glob("*.c")]):
         for no, ln in enumerate(strip(f.read_text()).splitlines(), 1):
             where = f"{f.relative_to(FW)}:{no}"
             for rx, what in ((MMIO_LIT, "register/window address"), (MMIO_CAST, "volatile pointer cast"),

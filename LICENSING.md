@@ -76,8 +76,10 @@ Every distribution of a package carries the licence texts with it: the release f
 
 ## No vendor material
 
-No M-VAVE material is part of Felucca. The firmware links no vendor code and contains no vendor
-data, and the packages hold only Felucca and the three SDK files above. The installer's
+The firmware links no vendor object code or Bluetooth library. With the default build, the
+packages hold Felucca and the three SDK files above. The optional BLE S1 build also contains
+numerical radio configuration tables transcribed from the frozen clean-room specification;
+see `docs/BLE-S1.md` for the precise provenance and its unresolved redistribution policy. The installer's
 "Return to official V15" holds only the official file's size and SHA-256: you select the
 official firmware file you downloaded yourself, and it is checked and installed in your browser,
 never uploaded or redistributed.
@@ -96,4 +98,6 @@ by those owners.
 
 ## Radio
 
-Felucca never enables the Bluetooth / Wi-Fi radio of the hardware.
+The default build leaves the radio disabled. `FELUCCA_BLE=1` enables the experimental
+clean-room BLE S1 controller and legacy advertising; see `docs/BLE-S1.md`. It does not
+provide a BLE MIDI host, connections, pairing, or encryption.
