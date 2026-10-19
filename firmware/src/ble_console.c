@@ -23,7 +23,59 @@ static void con_ble_status(void)
         uint32_t k=fm1_ble_irq_save(); hw=br_diag; fm1_ble_irq_restore(k);
         ble_get_diag(&d);
     }
-    con_puts("BLE S1 full recipe; connections disabled\r\n");
+    con_puts("BLE S2 / NimBLE 1.9.0 / MIDI; encryption off\r\n");
+    {
+        ble_breadcrumb_t b; uint32_t timer[8],k=fm1_ble_irq_save();
+        b=fm1_ble_breadcrumb; fm1_ble_worker_timer_readback(timer);
+        timer[4]=br_diag.worker_timer_calls; timer[5]=br_diag.worker_timer_gap_ticks;
+        timer[6]=br_diag.worker_timer_over_gap; timer[7]=br_diag.worker_timer_last_ticks;
+        fm1_ble_irq_restore(k);
+        con_kv("worker_timer_calls",(int32_t)timer[4]);
+        con_kv("worker_timer_max_gap_us",(int32_t)(timer[5]/24u));
+        con_kv("worker_timer_over_7500us",(int32_t)timer[6]);
+        con_kx("worker_timer_last_ticks",timer[7]);
+        con_kx("worker_timer_con",timer[0]); con_kv("worker_timer_cnt",(int32_t)timer[1]);
+        con_kv("worker_timer_prd",(int32_t)timer[2]); con_kx("worker_timer_irqcfg",timer[3]);
+        con_kx("ble_breadcrumb",b.last); con_kx("ble_breadcrumb_ticks",b.last_ticks);
+        con_kx("ble_fault_breadcrumb",b.fault); con_kx("ble_fault_ticks",b.fault_ticks);
+        con_kv("ble_fault_crash_count",(int32_t)b.fault_count);
+    }
+    {
+        ble_link_diag_t link; ble_host_diag_t host;
+        ble_ll_get_diag(&link); ble_host_get_diag(&host);
+        con_kv("link_state_idle_created_up_closing_stopped",link.state);
+        con_kv("link_epoch",(int32_t)link.epoch); con_kv("link_established",link.established);
+        con_kv("conn_interval_1250us",link.interval); con_kv("conn_latency",link.latency);
+        con_kv("conn_timeout_10ms",link.timeout); con_kv("conn_event",link.event);
+        con_kv("connections",(int32_t)link.created); con_kv("connect_invalid",(int32_t)link.invalid);
+        con_kv("conn_events",(int32_t)link.events);
+        con_kv("rx_A_new",(int32_t)link.rx_class[0]); con_kv("rx_B_crc_5_13",(int32_t)link.rx_class[1]);
+        con_kv("rx_C_repeat_9",(int32_t)link.rx_class[2]); con_kv("rx_D_unknown",(int32_t)link.rx_class[3]);
+        con_kv("retransmission_rx",(int32_t)link.repetitions);
+        con_kv("rx_delayed_stamp",(int32_t)link.rx_delayed);
+        con_kv("rx_backpressure",(int32_t)link.rx_backpressure); con_kv("rx_queued",link.rx_used); con_kv("rx_peak",link.rx_peak);
+        con_kv("tx_queued_loaded",link.tx_used); con_kv("establishment_fail",(int32_t)link.establishment_fail);
+        con_kv("supervision_fail",(int32_t)link.supervision_fail); con_kv("disconnects",(int32_t)link.disconnects);
+        con_kx("last_disconnect_reason",link.reason); con_kv("conn_updates",(int32_t)link.updates);
+        con_kv("channel_map_updates",(int32_t)link.map_updates); con_kv("late_instants",(int32_t)link.late_instants);
+        con_kv("acl_tx_accepted",(int32_t)link.acl_in); con_kv("acl_tx_rejected",(int32_t)link.acl_rejected);
+        con_kv("acl_rx",(int32_t)link.acl_out); con_kv("acl_acked",(int32_t)link.acknowledged);
+        con_kv("ncp_credits",(int32_t)link.ncp); con_kv("acl_flushed",(int32_t)link.flushed);
+        con_kv("control_dropped",(int32_t)link.ctrl_drop); con_kv("control_ignored",(int32_t)link.ignored);
+        con_kv("worker_max_gap_us",(int32_t)(link.worker_gap_ticks/24u));
+        con_kv("worker_max_us",(int32_t)(link.worker_max_ticks/24u));
+        con_kv("worker_over_7500us",(int32_t)link.worker_over_gap);
+        con_kv("worker_calls",(int32_t)link.worker_calls); con_kv("terminate_timeouts",(int32_t)link.terminate_timeouts);
+        con_kv("nimble_running",host.running); con_kv("nimble_synced",host.synced);
+        con_kv("nimble_syncs",(int32_t)host.syncs); con_kv("nimble_resets",(int32_t)host.resets);
+        con_kv("nimble_error",(int32_t)host.error); con_kv("nimble_assertions",(int32_t)host.assertions);
+        con_kv("nimble_event_drop",(int32_t)host.event_drop); con_kv("nimble_acl_drop",(int32_t)host.acl_drop);
+        con_kv("nimble_main_gap_ms",(int32_t)host.main_gap_ms); con_kv("nimble_mtu",host.mtu);
+        con_kv("midi_echo",host.echo); con_kv("nimble_subscribed",host.subscribed); con_kv("nimble_heap_used",(int32_t)host.heap_used);
+        con_kv("nimble_heap_peak",(int32_t)host.heap_peak); con_kv("nimble_heap_fail",(int32_t)host.heap_fail);
+        con_kv("midi_packets_in",(int32_t)host.midi_in); con_kv("midi_packets_out",(int32_t)host.midi_out);
+        con_kv("midi_bad",(int32_t)host.midi_bad); con_kv("midi_drop",(int32_t)host.midi_drop);
+    }
     con_kv("frozen",ble_console_frozen);
     con_kv("loop_iters_per_us_x1000",(int32_t)hw.loop_iters_per_us_x1000); con_kv("loop_ticks",(int32_t)hw.loop_ticks);
     for (i=0;i<4;i++) { con_puts("clock "); con_dec((int32_t)i); con_putc(' '); con_hex(hw.clocks[i],8); con_puts("\r\n"); }
@@ -56,7 +108,7 @@ static void con_ble_status(void)
     con_kv("event_work_over_150us",(int32_t)hw.event_over_150us);
     con_kv("ble_critical_max_ticks",(int32_t)hw.critical_max_ticks);
     con_kv("ble_critical_over_390us",(int32_t)hw.critical_over_390us);
-    con_kv("worker_max_gap_us",(int32_t)(hw.worker_gap_ticks/24));
+    con_kv("main_controller_gap_us",(int32_t)(hw.worker_gap_ticks/24));
     con_kv("stop_timeouts",(int32_t)hw.stop_timeouts); con_kv("restarts",(int32_t)hw.restarts);
     con_kx("enable_ticks",hw.enable_ticks); con_kx("first_event_close_ticks",hw.first_event_ticks);
     con_kx("dma_base",hw.dma_base); con_kx("dma_end",hw.dma_end); con_kx("modem_base",hw.modem_base);
@@ -83,7 +135,11 @@ static int con_ble_hexbyte(const char **p,uint8_t *v)
 }
 static void con_ble(const char *p)
 {
-    if (con_word(&p,"rate")) {
+    if(con_word(&p,"echo")) {
+        ble_host_echo(con_word(&p,"on")); con_puts("BLE MIDI echo configured\r\n");
+    } else if(con_word(&p,"host")) {
+        ble_host_resume(); con_puts("NimBLE resynchronisation queued\r\n");
+    } else if (con_word(&p,"rate")) {
         br_clock_probe(); con_puts("loop throughput sampled; use ble for result (not Hz)\r\n");
     } else if (con_word(&p,"pmu")) {
         unsigned i;
@@ -117,9 +173,9 @@ static void con_ble(const char *p)
             con_hex(r->intake,2); con_putc(' '); con_ble_bytes(r->data,r->len<32 ? r->len : 32);
         }
     } else if (con_word(&p,"adv")) {
-        ble_driver_start(0,ble_random_config); con_puts("ADV_IND startup queued\r\n");
+        ble_host_manual(); ble_driver_start(0,ble_random_config); con_puts("ADV_IND startup queued\r\n");
     } else if (con_word(&p,"nonconn")) {
-        ble_driver_start(3,ble_random_config); con_puts("ADV_NONCONN_IND startup queued\r\n");
+        ble_host_manual(); ble_driver_start(3,ble_random_config); con_puts("ADV_NONCONN_IND startup queued\r\n");
     } else if (con_word(&p,"random")) {
         uint8_t addr[6]; unsigned i;
         for (i=0;i<6;i++) if (!con_ble_hexbyte(&p,&addr[5-i])) break;
@@ -132,18 +188,18 @@ static void con_ble(const char *p)
         else { ble_set_power((uint8_t)level); con_puts("power level queued\r\n"); }
     } else if (con_word(&p,"stop")) {
         static const uint8_t cmd[4]={10,32,1,0};
-        ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,cmd,4));
+        ble_host_manual(); ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,cmd,4));
     } else if (con_word(&p,"reset")) {
         static const uint8_t cmd[3]={3,12,0};
-        ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,cmd,3));
+        ble_host_manual(); ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,cmd,3));
     } else if (con_word(&p,"hci")) {
         uint8_t packet[BLE_HCI_MAX]; unsigned n=0;
         while (*p==' ') p++;
         while (*p && n<sizeof packet && con_ble_hexbyte(&p,&packet[n])) { n++; while (*p==' ') p++; }
         if (*p) { con_puts("invalid hex or packet too long\r\n"); return; }
-        ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,packet,(uint16_t)n));
+        ble_host_manual(); ble_driver_stop(); con_kv("hci_intake",ble_hci_send(1,packet,(uint16_t)n));
     } else if (!*p) con_ble_status();
-    else con_puts("ble [rate|pmu|regs|adv|nonconn|stop|reset|power N|random ADDR|hci HEX|freeze|trace START N|thaw]\r\n");
+    else con_puts("ble [echo on/off|host|rate|pmu|regs|adv|nonconn|stop|reset|power N|random ADDR|hci HEX|freeze|trace START N|thaw]\r\n");
 }
 
 #pragma clang diagnostic pop

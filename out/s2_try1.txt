@@ -1,0 +1,23 @@
+Connect cycle 1/1
+Connected=True
+Traceback (most recent call last):
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 111, in <module>
+    if __name__=='__main__': main()
+                             ~~~~^^
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 110, in main
+    else: asyncio.run(run(args))
+          ~~~~~~~~~~~^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 71, in run
+    await call(device,'org.bluez.Device1','Connect')
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 40, in call
+    raise RuntimeError(f'{member}: {reply.error_name}: {reply.body}')
+RuntimeError: Connect: org.bluez.Error.Failed: ['le-connection-abort-by-local']

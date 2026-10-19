@@ -92,6 +92,10 @@ static void fm1_fault(const fm1_crash_t *c)
 {
     char b[12];
     uint32_t t0;
+#if FELUCCA_BLE
+    ble_breadcrumb_fault(&fm1_ble_breadcrumb,c->count);
+    ble_started=0; /* Crash-screen LCD yields must not enter the host. */
+#endif
     fm1_audio_stop();
     lcd_fill(0, 0, 240, 240, UI_CRASH_BG);            /* fixed, outside the palettes */
     draw_text_line(0, 8, 240, &AF_M, "FELUCCA CRASH", UI_CRASH_INK, UI_CRASH_BG, 1);
@@ -204,12 +208,12 @@ static void fm1_main(void)
         ble_platform_worker(); /* P6: first instance opens here */
         if (ble_boot_panel_pending) {
             ble_boot_panel_pending=0;
-            fm1_delay_ms(30);
+            ble_platform_delay(30);
             if ((fm1_in.buttons & 3u) == 3u) {
                 panel_setup();
                 settings_save();
             }
-            fm1_delay_ms(400);
+            ble_platform_delay(400);
             lcd_fill(0, 0, 240, 240, T_BG);
         }
 #endif

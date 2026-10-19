@@ -22,4 +22,5 @@
 #if FELUCCA_BLE
 	FM1_ISR isr_ble_rx, fm1_ble_rx_irq
 	FM1_ISR isr_ble_event, fm1_ble_event_irq
+	FM1_ISR isr_ble_worker, fm1_ble_worker_irq
 #endif

@@ -1,0 +1,17 @@
+
+build/felucca-ble-s2.elf:	file format ELF32-pi32v2
+
+Sections:
+Idx Name          Size      Address          Type
+  0               00000000 0000000000000000 
+  1 .text         00076230 0000000002000120 TEXT DATA 
+  2 .ram_text     00000b48 0000000001c00000 TEXT DATA 
+  3 .ble_trace    00005000 0000000001c00b48 BSS
+  4 .data         00000244 0000000001c08000 DATA 
+  5 .bss          00016b78 0000000001c08250 BSS
+  6 .pool         00050c60 0000000001c20000 BSS
+  7 .ble_dma      000010f4 0000000001c70c60 BSS
+  8 .noinit       000038e0 0000000001c7c000 BSS
+  9 .shstrtab     00000058 0000000000000000 
+ 10 .symtab       00008f40 0000000000000000 
+ 11 .strtab       0000846a 0000000000000000 

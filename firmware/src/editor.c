@@ -94,6 +94,9 @@ static int ed_smp_erase(uint32_t k, uint32_t all)  /* header sector, or the whol
         audio_silence();
         rc = fl_erase4k(ed_smp_slot(k) + i * 0x1000u, &took);
         fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
     }
     ed_smp_inval(k);
     return rc;
@@ -330,8 +333,12 @@ static int ed_flash_stop(void)
     if (!transport_busy())
         return 0;
     transport_req = 2;
-    while ((song.playing || chain_busy()) && fm1_ms - t0 < 100u)          /* the audio ISR stops it at its next block */
+    while ((song.playing || chain_busy()) && fm1_ms - t0 < 100u) {        /* audio stops it at the next block */
         fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
+    }
     return song.playing || chain_busy();
 }
 

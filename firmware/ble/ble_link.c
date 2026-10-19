@@ -1,0 +1,407 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* r3 controller-only worker. Runs at a deferred interrupt level below the
+ * radio. HCI/host delivery remains exclusively in ble_ll_poll (main loop). */
+#include "ble_link.h"
+#include "ble_memory.h"
+struct ble_link ble_link;
+typedef struct { uint32_t epoch; uint16_t header; uint8_t n,used; uint8_t data[27]; } rx_t;
+typedef struct { uint32_t epoch; uint8_t n,llid,state,terminate; uint8_t data[27]; uint32_t order; } tx_t;
+static struct {
+    rx_t rx[BLE_RX_BACKLOG],host_rx[BLE_RX_BACKLOG];
+    tx_t tx[BLE_TX_COUNT];
+    struct { uint32_t epoch; uint8_t n,data[14]; } meta[16];
+    uint8_t mr,mw,mc;
+    uint32_t order;
+    uint8_t r,w,count,hr,hw,hcount;
+} queues __attribute__((section(".pool.ble")));
+
+static void meta_add(const uint8_t *p,uint8_t n)
+{
+    if(queues.mc==14) { ble_link.diag.ctrl_drop++; return; } /* 2 reserved: creation/LTK */
+    queues.meta[queues.mw].epoch=ble_link.epoch; queues.meta[queues.mw].n=n;
+    memcpy(queues.meta[queues.mw].data,p,n); queues.mw=(uint8_t)((queues.mw+1u)%16u); queues.mc++;
+}
+static void instant_commit(uint32_t now)
+{
+    if(!ble_link.instant_kind || !ble_link.instant_programmed || (int32_t)(now-ble_link.instant_time)<0) return;
+    if(ble_link.instant_kind==1) {
+        uint8_t p[12]={0x3e,10,3,0,0x50,0,0,0,0,0,0,0};
+        ble_link.conn=ble_link.pending;
+        ble_put16(p+6,ble_link.conn.interval); ble_put16(p+8,ble_link.conn.latency); ble_put16(p+10,ble_link.conn.timeout);
+        meta_add(p,sizeof p); ble_link.diag.updates++;
+    } else { memcpy(ble_link.conn.map,ble_link.pending.map,5); ble_link.diag.map_updates++; }
+    ble_link.instant_kind=0;
+}
+static int live(void) { return ble_link.state==BLE_LINK_CREATED || ble_link.state==BLE_LINK_UP; }
+static void tx_flush(void)
+{
+    unsigned i;
+    for(i=0;i<BLE_TX_COUNT;i++) if(queues.tx[i].state) {
+        if(i<5) ble_link.diag.flushed++;
+        queues.tx[i].state=0;
+    }
+}
+void ble_ll_init(void) { memset(&ble_link,0,sizeof ble_link); memset(&queues,0,sizeof queues); }
+void ble_ll_reset(void)
+{
+    uint32_t epoch=ble_link.epoch+1u;
+    ble_ll_init(); ble_link.epoch=epoch;
+}
+void ble_ll_create(const ble_conn_t *c,uint32_t now)
+{
+    ble_link.conn=*c; ble_link.epoch++; ble_link.created_at=now;
+    ble_link.state=BLE_LINK_CREATED; ble_link.created_pending=1;
+    ble_link.diag.created++; ble_link.diag.accepted++;
+    ble_link.closed_valid=0; ble_link.closed_n=0xffff;
+    ble_link.first_switch=1; ble_link.hold=6; ble_link.priority=28;
+    ble_link.invalid_events=0; ble_link.instant_programmed=0;
+    ble_link.widen=ble_widen(c); ble_link.window=(uint16_t)(c->win*1250u+BLE_FIRST_WINDOW_EXTRA_US);
+    ble_link.acc=0; ble_link.rx_seen=ble_link.valid_seen=ble_link.anchor_seen=0;
+    ble_link.anchor_event=0; ble_link.reason=0;
+    ble_timeline_create(&ble_link.time,c,now); ble_link.anchor=ble_link.time.first;
+    ble_link.last_worker=now;
+}
+void ble_ll_close(uint8_t reason)
+{
+    if(!live()) return;
+    ble_link.state=BLE_LINK_CLOSING; ble_link.reason=reason;
+    ble_link.feature_pending=ble_link.features_ready=ble_link.update_pending=0;
+    ble_link.instant_kind=ble_link.peer_stop=0; queues.mc=queues.mr=queues.mw=0;
+    if(reason==8) ble_link.diag.supervision_fail++;
+    if(reason==0x3e) ble_link.diag.establishment_fail++;
+    ble_port_stop_begin();
+}
+/* Called before returning a hardware slot: 0 means it stays completely full.
+ * Copies are small, bounded and preserve the slot's own header and epoch. */
+int ble_ll_rx_room(void)
+{
+    if(live() && queues.count==BLE_RX_BACKLOG) { ble_link.diag.rx_backpressure++; return 0; }
+    return 1;
+}
+int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,int delayed)
+{
+    unsigned cls,n=header>>8;
+    uint8_t reason;
+    rx_t *r;
+    if(!live()) return 1;
+    if(!ble_ll_rx_room()) return 0;
+    instant_commit(ble_port_ticks());
+    if(delayed) ble_link.diag.rx_delayed++;
+    cls=ble_rx_class(status,(uint8_t)n); ble_link.diag.rx_class[cls]++;
+    ble_link.rx_seen=1;
+    if(cls==0 || cls==2) ble_link.valid_seen=1;
+    if(cls==2) ble_link.diag.repetitions++;
+    reason=ble_timeline_rx(&ble_link.time,&ble_link.conn,(uint8_t)cls,stamp);
+    if(reason) { ble_ll_close(reason); return 1; }
+    if(ble_link.time.established) {
+        ble_link.state=BLE_LINK_UP;
+        if(ble_link.first_switch) {
+            ble_link.first_switch=0; ble_link.window=(uint16_t)(2u*ble_link.widen+BLE_WINDOW_PAD_US);
+            ble_port_window(ble_link.window);
+        }
+    }
+    /* Anchor from the first timed valid frame of each event. RX timestamp is
+     * packet-end service time; the explicit lag constant is a bench retune. */
+    if(!delayed && (cls==0 || cls==2) && (!ble_link.anchor_seen || event!=ble_link.anchor_event)) {
+        ble_link.anchor=stamp-(80u+8u*n+BLE_RX_IRQ_LAG_US)*24u;
+        ble_link.anchor_event=event; ble_link.anchor_seen=1;
+    }
+    if(cls || !(header&3u) || ((header&3u)==1 && !n) || !n) return 1;
+    r=&queues.rx[queues.w]; r->epoch=ble_link.epoch; r->header=header; r->n=(uint8_t)n;
+    memcpy(r->data,data,n); r->used=1;
+    queues.w=(uint8_t)((queues.w+1u)%BLE_RX_BACKLOG); queues.count++;
+    if((unsigned)queues.count+queues.hcount>ble_link.diag.rx_peak) ble_link.diag.rx_peak=(uint16_t)(queues.count+queues.hcount);
+    if((header&3u)!=3 && ble_link.hold<3) ble_link.hold=3;
+    return 1;
+}
+int ble_ll_rx(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event)
+{
+    return ble_ll_rx_delayed(status,header,data,stamp,event,0);
+}
+static int tx_queue(const uint8_t *p,uint8_t n,uint8_t llid,int end)
+{
+    unsigned i,start=llid==3 ? (end ? 12u : 5u) : 0u,limit=llid==3 ? (end ? 13u : 12u) : 5u;
+    if(!live() || ble_link.peer_stop) return -1;
+    for(i=start;i<limit;i++) if(!queues.tx[i].state) {
+        tx_t *t=&queues.tx[i];
+        t->epoch=ble_link.epoch; t->n=n; t->llid=llid; t->terminate=(uint8_t)end;
+        memcpy(t->data,p,n); t->order=++queues.order; t->state=1;
+        if(ble_link.hold<2) ble_link.hold=2;
+        ble_port_latency(ble_link.conn.latency,0);
+        ble_port_priority(llid==3 ? 30u : 28u);
+        ble_port_refill(); return (int)i;
+    }
+    if(llid==3) ble_link.diag.ctrl_drop++;
+    return -1;
+}
+int ble_ll_acl(const uint8_t *p,uint16_t n)
+{
+    uint16_t h,len; int rc;
+    uint32_t k=ble_port_lock();
+    if(n<4) goto reject;
+    h=ble_get16(p); len=ble_get16(p+2);
+    if(!live() || ble_link.local_terminate || ble_link.peer_stop || (h&0xfffu)!=BLE_HANDLE ||
+       (h&0xc000u) || (h&0x3000u)==0x3000u || !len || len>27 || n!=len+4u) goto reject;
+    rc=tx_queue(p+4,(uint8_t)len,(h&0x1000u) ? 1u : 2u,0);
+    if(rc<0) goto reject;
+    ble_link.diag.acl_in++; ble_port_unlock(k); return 0;
+reject:
+    ble_link.diag.acl_rejected++; ble_port_unlock(k); return 1;
+}
+int ble_ll_acl_waiting(void)
+{
+    unsigned i;
+    for(i=0;i<5;i++) if(queues.tx[i].state==1) return 1;
+    return 0;
+}
+int ble_ll_tx_pick(void)
+{
+    unsigned i; int best=-1;
+    if(!live() || ble_link.peer_stop) return -1;
+    for(i=5;i<BLE_TX_COUNT;i++) if(queues.tx[i].state==1 &&
+        (best<0 || (int32_t)(queues.tx[i].order-queues.tx[best].order)<0)) best=(int)i;
+    if(best<0) for(i=0;i<5;i++) if(queues.tx[i].state==1 &&
+        (best<0 || (int32_t)(queues.tx[i].order-queues.tx[best].order)<0)) best=(int)i;
+    if(best>=0) queues.tx[best].state=2;
+    return best;
+}
+const uint8_t *ble_ll_tx_data(unsigned id) { return queues.tx[id].data; }
+uint8_t ble_ll_tx_len(unsigned id) { return queues.tx[id].n; }
+uint8_t ble_ll_tx_llid(unsigned id) { return queues.tx[id].llid; }
+void ble_ll_tx_ack(unsigned id)
+{
+    tx_t *t=&queues.tx[id];
+    if(t->state!=2 || t->epoch!=ble_link.epoch) return;
+    t->state=0;
+    if(id<5) { ble_link.completed++; ble_link.diag.acknowledged++; }
+    if(t->terminate && live()) ble_ll_close(0x16);
+}
+uint8_t ble_ll_disconnect(uint16_t handle,uint8_t reason)
+{
+    static const uint8_t allowed[]={5,0x13,0x14,0x15,0x1a,0x29,0x3b};
+    unsigned i; uint8_t p[2]={2,reason};
+    if(handle!=BLE_HANDLE || ble_link.state==BLE_LINK_IDLE) return 2;
+    if(!live() || ble_link.local_terminate || ble_link.peer_stop) return 0x0c;
+    for(i=0;i<sizeof allowed;i++) if(allowed[i]==reason) break;
+    if(i==sizeof allowed) return 0x12;
+    if(tx_queue(p,2,3,1)<0) return 0x0c;
+    ble_link.local_terminate=1;
+    ble_link.terminate_deadline=ble_port_ticks()+(uint32_t)ble_link.conn.timeout*240000u;
+    return 0;
+}
+uint8_t ble_ll_features(uint16_t handle)
+{
+    if(handle!=BLE_HANDLE || !live()) return 2;
+    if(ble_link.feature_pending || ble_link.features_ready) return 0x0c;
+    ble_link.feature_pending=1; ble_link.feature_deadline=ble_port_ticks()+800u*24000u;
+    return 0;
+}
+static void control(const uint8_t *p,uint8_t n)
+{
+    static const uint8_t sizes[]={12,8,2,23,13,1,1,2,9,9,1,1,6,2,9,24,24,3,1,1,9,9};
+    uint8_t reply[9]={0}; unsigned op=p[0];
+    if(op<sizeof sizes && n!=sizes[op]) { ble_link.diag.ignored++; return; }
+    switch(op) {
+    case 0: case 1: {
+        ble_conn_t c=ble_link.conn; uint16_t instant;
+        uint32_t nominal,distance,step_ticks;
+        if(ble_link.instant_kind) { ble_link.diag.ignored++; return; }
+        if(!op) {
+            c.win=p[1]; c.offset=ble_get16(p+2); c.interval=ble_get16(p+4);
+            c.latency=ble_get16(p+6); c.timeout=ble_get16(p+8); instant=ble_get16(p+10);
+            if(!ble_conn_params_valid(&c)) { ble_link.diag.ignored++; return; }
+        } else {
+            memcpy(c.map,p+1,5); c.map[4]&=31; instant=ble_get16(p+6);
+            if(ble_map_count(c.map)<2) { ble_link.diag.ignored++; return; }
+        }
+        distance=(uint16_t)(instant-ble_link.anchor_event);
+        step_ticks=(uint32_t)ble_link.conn.interval*30000u;
+        if(!ble_instant_valid(instant,ble_link.closed_valid ? ble_link.closed_n : 0xffffu)) {
+            ble_link.diag.late_instants++; ble_ll_close(0x28); return;
+        }
+        /* Far-future instants need no absolute 24 MHz deadline yet (it would
+         * wrap). Rebase the nominal anchor at every event, and form T_inst
+         * only at the close of I-1. Bound the multiplication before using it. */
+        if(distance<=0x7fffffffu/step_ticks) {
+            nominal=ble_link.anchor+distance*step_ticks;
+            if((int32_t)(nominal-ble_port_ticks())<(int32_t)(BLE_INSTANT_GUARD_US*24u)) {
+                ble_link.diag.late_instants++; ble_ll_close(0x28); return;
+            }
+        }
+        ble_link.pending=c; ble_link.instant=instant; ble_link.instant_kind=(uint8_t)(op+1u);
+        ble_link.instant_programmed=0; ble_port_instant((uint8_t)(op+1u),instant,&c); break;
+    }
+    case 2: ble_link.peer_stop=1; ble_link.reason=p[1];
+        ble_link.feature_pending=ble_link.features_ready=0; queues.mc=queues.mr=queues.mw=0; break;
+    case 8:
+        memcpy(ble_link.features,p+1,8); ble_link.features[0]=0; /* S2 local features = 0 */
+        ble_link.features_known=1; reply[0]=9; tx_queue(reply,9,3,0); break;
+    case 12:
+        if(!ble_link.version_known) { memcpy(ble_link.peer_version,p+1,5); ble_link.version_known=1; }
+        if(!ble_link.version_sent) {
+            reply[0]=12; reply[1]=6; ble_put16(reply+2,0xffff); ble_put16(reply+4,2);
+            if(tx_queue(reply,6,3,0)>=0) ble_link.version_sent=1;
+        }
+        break;
+    case 3: /* S2 advertises no encryption: reject the unsupported procedure. */
+        reply[0]=13; reply[1]=0x1a; tx_queue(reply,2,3,0); break;
+    case 4: case 5: case 6: case 7: case 9: case 10: case 11: case 13: case 14: case 16: case 17: case 19:
+        ble_link.diag.ignored++; break;
+    default: reply[0]=7; reply[1]=(uint8_t)op; tx_queue(reply,2,3,0); break;
+    }
+}
+void ble_ll_event(uint16_t event,uint32_t now)
+{
+    uint8_t reason; unsigned i; int pending=0;
+    if(!live() || (int32_t)(now-ble_link.time.first)<0) return; /* A8 synthetic close */
+    ble_link.diag.events++; ble_link.diag.event=event;
+    instant_commit(now);
+    if(event!=ble_link.anchor_event) {
+        ble_link.anchor+=(uint32_t)(uint16_t)(event-ble_link.anchor_event)*ble_link.conn.interval*30000u;
+        ble_link.anchor_event=event;
+    }
+    ble_link.closed_n=event; ble_link.closed_valid=1;
+    if(ble_link.peer_stop) { ble_ll_close(ble_link.reason); return; }
+    if(ble_link.instant_kind && !ble_link.instant_programmed && (uint16_t)(event+1u)==ble_link.instant) {
+        uint8_t kind=ble_link.instant_kind;
+        ble_link.instant_time=ble_link.anchor+(uint32_t)(uint16_t)(ble_link.instant-ble_link.anchor_event)*ble_link.conn.interval*30000u;
+        if((int32_t)(ble_link.instant_time-now)<(int32_t)(BLE_INSTANT_GUARD_US*24u)) {
+            ble_link.diag.late_instants++; ble_ll_close(0x28); return;
+        }
+        if(kind==1) {
+            ble_conn_t step=ble_link.conn;
+            uint32_t ti=ble_link.anchor+(uint32_t)(uint16_t)(ble_link.instant-ble_link.anchor_event)*ble_link.conn.interval*30000u;
+            uint32_t extra; uint16_t wi;
+            { static const uint16_t ppm[]={500,250,150,100,75,50,30,20};
+              uint32_t product=(uint32_t)(ppm[step.sca&7u]+BLE_LOCAL_SCA_PPM)*(step.interval+ble_link.pending.offset);
+              wi=(uint16_t)(((product/800u)+1u)*2u); }
+            extra=ble_link.widen>wi ? (uint32_t)ble_link.widen+wi : 0;
+            ble_link.widen=ble_widen(&ble_link.pending);
+            if(ble_link.widen>BLE_UPDATE_WIDEN_US) ble_link.widen=BLE_UPDATE_WIDEN_US;
+            ble_link.window=(uint16_t)(extra+ble_link.pending.win*1250u+BLE_UPDATE_WINDOW_EXTRA_US);
+            ble_link.time.sup=ti+(uint32_t)ble_link.pending.timeout*240000u;
+            ble_link.time.win_reset=ti+(uint32_t)ble_link.pending.offset*30000u; ble_link.time.win_pending=1;
+            ble_link.anchor=ble_link.time.win_reset; ble_link.anchor_event=ble_link.instant; ble_link.anchor_seen=0;
+            ble_link.first_switch=1; ble_link.acc=0;
+        }
+        ble_port_apply(kind,&ble_link.pending,ble_link.widen,ble_link.window);
+        ble_link.instant_programmed=1;
+    }
+    /* During event I, apply the new supervision period, even before its close. */
+    reason=ble_timeline_check(&ble_link.time,ble_link.instant_kind==1 && ble_link.instant_programmed ?
+        &ble_link.pending : &ble_link.conn,now);
+    if(reason) { ble_ll_close(reason); return; }
+    for(i=0;i<BLE_TX_COUNT;i++) if(queues.tx[i].state) { pending=1; break; }
+    if(!ble_link.valid_seen) pending=1;
+    if(pending && ble_link.hold<1) ble_link.hold=1;
+    if(ble_link.hold) ble_link.hold--;
+    /* Reaching zero after a hold=1 must not enable latency while an owned
+     * TX slot is still waiting for its acknowledgement. */
+    ble_port_latency(ble_link.conn.latency,ble_link.hold==0 && !pending);
+    ble_link.invalid_events=ble_link.valid_seen ? 0 : (uint8_t)(ble_link.invalid_events<254 ? ble_link.invalid_events+1u : 254u);
+    if(ble_link.instant_kind || ble_link.invalid_events>3) ble_link.priority=30;
+    else if(ble_ll_acl_waiting()) ble_link.priority=28;
+    else if(ble_link.priority!=30 || ble_link.valid_seen) {
+        unsigned p=ble_link.priority ? ble_link.priority-1u : 19u;
+        if(p>27) p=27;
+        if(p==25) p=19;
+        if(p<20) p=ble_link.invalid_events ? 28 : 19;
+        ble_link.priority=(uint8_t)p;
+    }
+    ble_port_priority(ble_link.priority);
+    /* The HAL consumes rx_seen/valid_seen for missed-event correction then
+     * clears them; it never uses RX status bit 8 for these indications. */
+}
+void ble_ll_worker(void)
+{
+    unsigned budget=BLE_RX_BACKLOG;
+    uint32_t start=ble_port_ticks(),gap=start-ble_link.last_worker,key;
+    if(live()) {
+        ble_link.diag.worker_calls++;
+        if(gap>ble_link.diag.worker_gap_ticks) ble_link.diag.worker_gap_ticks=gap;
+        if(gap>7500u*24u) ble_link.diag.worker_over_gap++;
+    }
+    ble_link.last_worker=start;
+    while(budget--) {
+        rx_t local;
+        key=ble_port_lock();
+        if(!live() || ble_link.peer_stop || !queues.count) { ble_port_unlock(key); break; }
+        local=queues.rx[queues.r];
+        if((local.header&3u)!=3 && queues.hcount==BLE_RX_BACKLOG) { ble_port_unlock(key); break; }
+        queues.r=(uint8_t)((queues.r+1u)%BLE_RX_BACKLOG); queues.count--;
+        if(local.epoch==ble_link.epoch) {
+            if((local.header&3u)==3) control(local.data,local.n);
+            else {
+                queues.host_rx[queues.hw]=local; queues.hw=(uint8_t)((queues.hw+1u)%BLE_RX_BACKLOG);
+                queues.hcount++;
+            }
+        }
+        ble_port_unlock(key);
+    }
+    key=ble_port_lock();
+    if(live()) {
+        instant_commit(ble_port_ticks());
+        uint8_t reason;
+        ble_port_rx_recover();
+        reason=ble_timeline_check(&ble_link.time,ble_link.instant_kind==1 && ble_link.instant_programmed ?
+            &ble_link.pending : &ble_link.conn,ble_port_ticks());
+        if(reason) ble_ll_close(reason);
+        else if(ble_link.local_terminate && (int32_t)(ble_port_ticks()-ble_link.terminate_deadline)>=0) { ble_link.diag.terminate_timeouts++; ble_ll_close(8); }
+        if(live() && ble_link.feature_pending && (ble_link.features_known || (int32_t)(ble_port_ticks()-ble_link.feature_deadline)>=0)) {
+            ble_link.feature_pending=0; ble_link.features_ready=1;
+            ble_link.features_status=ble_link.features_known ? 0 : 0x1a;
+            { uint8_t p[14]={0x3e,12,4,0,0x50,0,0,0,0,0,0,0,0,0};
+              p[3]=ble_link.features_status;
+              if(!p[3]) memcpy(p+6,ble_link.features,8);
+              meta_add(p,sizeof p); ble_link.features_ready=0; }
+        }
+    }
+    ble_port_unlock(key);
+    if(ble_link.state==BLE_LINK_CLOSING && ble_port_stop_poll()) {
+        key=ble_port_lock(); tx_flush(); queues.count=queues.hcount=0; queues.mc=queues.mr=queues.mw=0;
+        ble_link.state=BLE_LINK_STOPPED; ble_link.disconn_pending=1; ble_port_unlock(key);
+    }
+    gap=ble_port_ticks()-start;
+    if(gap>ble_link.diag.worker_max_ticks) ble_link.diag.worker_max_ticks=gap;
+}
+/* All host data originate here, called only by the main-loop HCI worker. */
+int ble_ll_poll(uint8_t *type,uint8_t *p,uint16_t *n)
+{
+    uint32_t key=ble_port_lock();
+    *type=4;
+    if(ble_link.created_pending) {
+        const ble_conn_t *c=&ble_link.conn;
+        p[0]=0x3e; p[1]=19; p[2]=1; p[3]=0; ble_put16(p+4,BLE_HANDLE);
+        p[6]=1; p[7]=c->peer_type; memcpy(p+8,c->peer,6);
+        ble_put16(p+14,c->interval); ble_put16(p+16,c->latency); ble_put16(p+18,c->timeout); p[20]=c->sca;
+        *n=21; ble_link.created_pending=0;
+    } else if(ble_link.completed) {
+        p[0]=0x13; p[1]=5; p[2]=1; ble_put16(p+3,BLE_HANDLE); ble_put16(p+5,ble_link.completed);
+        ble_link.diag.ncp+=ble_link.completed; ble_link.completed=0; *n=7;
+    } else if(ble_link.disconn_pending) {
+        p[0]=5; p[1]=4; p[2]=0; ble_put16(p+3,BLE_HANDLE); p[5]=ble_link.reason; *n=6;
+        ble_link.disconn_pending=0; ble_link.diag.disconnects++;
+        ble_link.state=BLE_LINK_IDLE; ble_link.epoch++;
+        ble_link.local_terminate=ble_link.features_known=ble_link.version_sent=ble_link.version_known=0;
+        queues.r=queues.w=queues.hr=queues.hw=0;
+    } else if(live() && queues.mc) {
+        *n=queues.meta[queues.mr].n; memcpy(p,queues.meta[queues.mr].data,*n);
+        queues.mr=(uint8_t)((queues.mr+1u)%16u); queues.mc--;
+    } else if(live() && queues.hcount) {
+        rx_t *r=&queues.host_rx[queues.hr];
+        *type=2; ble_put16(p,(uint16_t)(BLE_HANDLE|((r->header&3u)==2 ? 0x2000u : 0x1000u)));
+        ble_put16(p+2,r->n); memcpy(p+4,r->data,r->n); *n=(uint16_t)(r->n+4u);
+        queues.hr=(uint8_t)((queues.hr+1u)%BLE_RX_BACKLOG); queues.hcount--; ble_link.diag.acl_out++;
+    } else { ble_port_unlock(key); return 0; }
+    ble_port_unlock(key); return 1;
+}
+void ble_ll_get_diag(ble_link_diag_t *d)
+{
+    uint32_t k=ble_port_lock(); unsigned i;
+    *d=ble_link.diag; d->state=ble_link.state; d->epoch=ble_link.epoch;
+    d->interval=ble_link.conn.interval; d->latency=ble_link.conn.latency; d->timeout=ble_link.conn.timeout;
+    d->established=ble_link.time.established; d->reason=ble_link.reason;
+    d->rx_used=(uint16_t)(queues.count+queues.hcount); d->tx_used=0;
+    for(i=0;i<BLE_TX_COUNT;i++) d->tx_used+=(uint16_t)(queues.tx[i].state!=0);
+    memcpy(d->peer_features,ble_link.features,8); ble_port_unlock(k);
+}

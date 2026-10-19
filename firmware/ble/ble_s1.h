@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Clean-room WL82 S1. Hardware facts: frozen r2/r2b specifications only. */
+/* Common clean-room WL82 S1/S2 API. Hardware facts: frozen specifications. */
 #ifndef FELUCCA_BLE_S1_H
 #define FELUCCA_BLE_S1_H
 #include <stdint.h>
@@ -22,6 +22,15 @@ enum {
     BF_FREQ_IDX=104, BF_FREQ_USED=144, BF_FREQ_TBL=184, BF_FREQ_USED_TBL=224,
     BF_WIN_STEADY=274, BF_POWER=288, BF_TX_SET=296
 };
+
+/* r3 02 §3.3: this aggregate is two halfwords at 0x22 and 0x24.
+ * A word access at 0x22 is unaligned on pi32v2. Keep volatile halfword stores
+ * even when the value fits in the low half (first/steady/missed windows). */
+static inline void ble_frame_window_set(volatile uint16_t *frame,uint32_t us)
+{
+    frame[BF_WIN/2]=(uint16_t)us;
+    frame[BF_WIN/2+1]=(uint16_t)(us>>16);
+}
 
 typedef struct {
     uint8_t xtal[2], pa[7], mcs[20], trim[68], public_addr[6];
@@ -46,6 +55,7 @@ typedef struct {
     uint32_t bad_rx, rx_max_ticks, event_max_ticks, irq_over_budget;
     uint32_t event_work_max_ticks, event_over_150us, critical_max_ticks, critical_over_390us;
     uint32_t worker_gap_ticks, stop_timeouts, restarts, enable_ticks, first_event_ticks;
+    uint32_t worker_timer_calls, worker_timer_last_ticks, worker_timer_gap_ticks, worker_timer_over_gap;
     uint32_t dma_base, dma_end, modem_base, canary_errors;
     uint8_t p33_before[38], p33_after[38], vco[48];
 } ble_hw_diag_t;
@@ -83,7 +93,8 @@ void ble_frame_init(uint8_t *f, const ble_adv_t *adv);
 uint16_t ble_adv_header(uint8_t type, uint8_t own_type);
 uint8_t ble_adv_payload(uint8_t *out, const uint8_t *addr, const uint8_t *data, uint8_t n);
 
-/* Platform callbacks, main context only; stop_poll: 0 pending, 1 stopped, -1 quarantined. */
+/* Platform callbacks: controller/main contexts, never host callbacks from ISR.
+ * stop_poll: 0 pending, 1 stopped, -1 quarantined. */
 uint32_t ble_port_ticks(void);
 uint32_t ble_port_ms(void);
 int ble_port_start(const ble_adv_t *adv);

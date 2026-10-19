@@ -1,0 +1,15 @@
+No word-width BF_WIN accesses in HAL source.
+ble_port_window:
+200801c:    50 ed 13 03       	h[r1+50] = r0
+2008022:    50 ed 15 03       	h[r1+52] = r0
+ble_port_apply:
+2008152:    50 ed 73 33       	h[r7+50] = r3
+2008158:    50 ed 75 03       	h[r7+52] = r0
+bb_rx_pending:
+20085e0:    50 ed d3 03       	h[r13+50] = r0
+20085e6:    50 ed d5 03       	h[r13+52] = r0
+fm1_ble_event_irq:
+2008856:    50 ed a3 13       	h[r10+50] = r1
+200885a:    50 ed a5 03       	h[r10+52] = r0
+200890e:    50 ed a3 13       	h[r10+50] = r1
+2008914:    50 ed a5 13       	h[r10+52] = r1

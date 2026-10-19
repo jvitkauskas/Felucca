@@ -4,6 +4,16 @@
 #include <stdio.h>
 #include <string.h>
 #include "../firmware/ble/ble_s1.h"
+#include "../firmware/ble/ble_link.h"
+uint32_t ble_port_lock(void) { return 0; }
+void ble_port_unlock(uint32_t k) { (void)k; }
+void ble_port_refill(void) { }
+void ble_port_rx_recover(void) { }
+void ble_port_window(uint32_t us) { (void)us; }
+void ble_port_priority(unsigned p) { (void)p; }
+void ble_port_latency(uint16_t l,int en) { (void)l; (void)en; }
+void ble_port_instant(uint8_t k,uint16_t i,const ble_conn_t *c) { (void)k; (void)i; (void)c; }
+void ble_port_apply(uint8_t k,const ble_conn_t *c,uint16_t w,uint32_t win) { (void)k; (void)c; (void)w; (void)win; }
 
 static uint32_t tick,starts,updates,stops,responses;
 static int failure,stop_result=1;
@@ -124,7 +134,7 @@ static void controller_tests(void)
     assert(!send(0x1009,0,0) && !memcmp(event+6,pub,6));
     assert(!send(0x2002,0,0) && event_n==9 && event[6]==27 && event[8]==5);
     assert(!send(0x1002,0,0)); memcpy(map,event+6,64);
-    assert(map[5]==192 && map[14]==40 && map[15]==2 && map[25]==(FELUCCA_BLE_TX_DBM==127 ? 0xb7 : 0xf7) && map[26]==3 && map[28]==8);
+    assert(map[5]==192 && map[14]==40 && map[15]==2 && map[25]==(FELUCCA_BLE_TX_DBM==127 ? 0xb7 : 0xf7) && map[26]==3 && map[0]==0x20 && map[27]==0xa0 && map[28]==0x0e);
     for (i=29;i<64;i++) assert(map[i]==0);
 #if FELUCCA_BLE_TX_DBM == 127
     assert(send(0x2007,0,0)==1);

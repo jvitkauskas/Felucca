@@ -1,0 +1,5 @@
+Original word-store reproducer: rejected by UBSan as expected
+build/s2-tests/window-legacy-alignment.c:5:49: runtime error: store to misaligned address 0x7ffd35fd0372 for type 'volatile uint32_t', which requires 4 byte alignment
+0x7ffd35fd0372: note: pointer points here
+ 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00
+              ^ 

@@ -25,6 +25,9 @@ static void con_putc(char c)
             return;
         }
         fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
     }
     cdc_out[co_w % CO_N] = (uint8_t)c;
     RING_PUBLISH();

@@ -148,8 +148,14 @@ static int midi_enqueue(uint32_t pkt, uint32_t source)
     return 1;
 }
 
+#if FELUCCA_BLE
+#include "../ble/ble_host.h"
+#endif
 static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 {
+#if FELUCCA_BLE
+    ble_host_midi_out(pkt,fm1_ms);
+#endif
     if (usb.config && mo_w - mo_r < MQ) {
         midi_out_q[mo_w % MQ] = pkt;
         RING_PUBLISH();

@@ -222,13 +222,19 @@ def build_app():
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
     if ble:
-        for source in ("ble_logic", "ble_controller"):
+        for source in ("ble_logic", "ble_controller", "ble_link_logic", "ble_link", "ble_midi", "ble_heap"):
             obj = OUT / f"{source}.o"
             tc("cc", *flags, "-Wextra", "-Werror", "-std=c11", "-Ifirmware/ble", "-c",
                FW / "ble" / f"{source}.c", "-o", obj)
             extra.append(obj)
+        import nimble_build
+        for i,source in enumerate([*nimble_build.sources(),FW/"ble/ble_npl.c",FW/"ble/ble_host.c"]):
+            obj=OUT/f"nimble_{i}_{source.stem}.o"
+            tc("cc",*flags,"-Wextra","-Werror",*nimble_build.flags(target=True,vendor=source.is_relative_to(nimble_build.BASE)),
+               "-std=c11","-c",source,"-o",obj)
+            extra.append(obj)
     elf = OUT / "felucca.elf"
-    tc("pi32v2/bin/ld", "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
+    tc("pi32v2/bin/ld", *(["--gc-sections"] if ble else []), "-T", FW / "app.ld", OUT / "crt0.o", OUT / "fm1_vec.o", OUT / "fm1_isr.o",
        OUT / "felucca.o", *extra, "-o", elf)
     for sect in ("text.bin", "data.bin", "ramtext.bin"):
         (OUT / sect).unlink(missing_ok=True)

@@ -1,0 +1,45 @@
+connected on try 1 at 00:15:29
+arp 1 sent 00:15:35
+arp 2 sent 00:17:35
+arp 3 sent 00:19:36
+arp 4 sent 00:21:36
+arp 5 sent 00:23:37
+notifications received: 2
+Connected=False
+conn_interval_1250us 12
+conn_latency 0
+conn_timeout_10ms 400
+connections 17
+conn_events 36285
+rx_A_new 52545
+rx_B_crc_5_13 32
+rx_C_repeat_9 50
+retransmission_rx 50
+rx_backpressure 0
+rx_peak 2
+supervision_fail 0
+disconnects 17
+last_disconnect_reason 0x00000013
+conn_updates 17
+acl_tx_accepted 850
+acl_acked 850
+ncp_credits 850
+worker_max_gap_us 1046
+worker_max_us 59
+nimble_resets 0
+nimble_error 0
+midi_packets_in 56
+midi_packets_out 591
+midi_drop 0
+error 0
+rx_max_ticks 1717
+event_max_ticks 1064
+rx_over_380us 0
+event_work_over_150us 0
+ble_critical_max_ticks 6022
+ble_critical_over_390us 0
+stop_timeouts 0
+dma_canary_errors 0
+audio_max_us 733
+audio_late 0
+voices_shed 0

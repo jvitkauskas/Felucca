@@ -1,0 +1,50 @@
+Connect cycle 1/10
+MIDI UUID discovered; empty read passed; notifications enabled. Play FM-1 keys.
+Connected=False
+Connect cycle 2/10
+Connected=True
+MIDI UUID discovered; empty read passed; notifications enabled. Play FM-1 keys.
+Connected=False
+Connect cycle 3/10
+Connected=True
+MIDI UUID discovered; empty read passed; notifications enabled. Play FM-1 keys.
+Connected=False
+Connect cycle 4/10
+Connected=True
+MIDI UUID discovered; empty read passed; notifications enabled. Play FM-1 keys.
+Connected=False
+Connect cycle 5/10
+Connected=True
+    raise RuntimeError(f'{member}: {reply.error_name}: {reply.body}')
+RuntimeError: Connect: org.bluez.Error.Failed: ['le-connection-abort-by-local']
+connections 6
+connect_invalid 0
+establishment_fail 0
+supervision_fail 0
+disconnects 6
+last_disconnect_reason 0x00000013
+acl_tx_accepted 696
+acl_acked 696
+ncp_credits 696
+acl_flushed 0
+worker_max_gap_us 1046
+terminate_timeouts 0
+nimble_resets 0
+nimble_error 0
+nimble_assertions 0
+error 0
+rx_over_380us 0
+event_work_over_150us 0
+ble_critical_over_390us 0
+stop_timeouts 0
+dma_canary_errors 0
+OK 10, failed attempts 0
+connections 16
+connect_invalid 0
+establishment_fail 0
+disconnects 16
+nimble_resets 0
+error 0
+connect_ignored 0
+bad_rx 0
+stop_timeouts 0

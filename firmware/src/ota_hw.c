@@ -4,10 +4,19 @@
  * OTA area, the progress screen, the commit (record into RAM, core reset). The host test
  * (ota_test.c) provides its own. */
 static uint32_t ota_now_ms(void) { return fm1_ms; }
-static void ota_idle(void) { fm1_wdt_feed(); }
+static void ota_idle(void)
+{
+    fm1_wdt_feed();
+#if FELUCCA_BLE
+    ble_platform_yield();
+#endif
+}
 static int ota_in_area(uint32_t off, uint32_t n) { return FL_IN(off, n, OTA_AREA, OTA_AREA + OTA_AREA_LEN); }
 static int ota_erase(uint32_t off)
 {
+#if FELUCCA_BLE
+    if(fm1_ble_link_active()) return -8;
+#endif
     uint32_t took;
     if (!ota_in_area(off, 0x1000u) || (off & 0xFFFu))
         return -8;
@@ -16,6 +25,9 @@ static int ota_erase(uint32_t off)
 }
 static int ota_prog(uint32_t off, const void *p, uint32_t n)
 {
+#if FELUCCA_BLE
+    if(fm1_ble_link_active()) return -8;
+#endif
     if (!ota_in_area(off, n))
         return -8;
     return fl_write(off, p, n);
@@ -44,7 +56,11 @@ static void ota_show(uint32_t step, int32_t code)
         b[k] = 0;
     }
     draw_text_box(0, 124, 240, &AF_S, b, T_THEME, 1);
+#if FELUCCA_BLE
+    ble_platform_delay(1500);
+#else
     fm1_delay_ms(1500);
+#endif
 }
 static void ota_commit(const uint8_t *parm)
 {

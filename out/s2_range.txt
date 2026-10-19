@@ -1,0 +1,15 @@
+connections 19
+establishment_fail 0
+supervision_fail 1
+disconnects 18
+last_disconnect_reason 0x00000000
+terminate_timeouts 0
+nimble_resets 0
+error 0
+enabled 0
+stop_timeouts 0
+reconnect OK (try 1)
+connections 19
+disconnects 19
+last_disconnect_reason 0x00000013
+error 0

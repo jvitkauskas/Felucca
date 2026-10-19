@@ -1,0 +1,50 @@
+Connect cycle 1/1
+Connected=True
+FM-1 -> desktop #1: 
+MIDI UUID discovered; empty read passed; notifications enabled. Play FM-1 keys.
+Traceback (most recent call last):
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 111, in <module>
+    if __name__=='__main__': main()
+                             ~~~~^^
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 110, in main
+    else: asyncio.run(run(args))
+          ~~~~~~~~~~~^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 90, in run
+    await call(characteristic,'org.bluez.GattCharacteristic1','WriteValue','aya{sv}',[packet(0x90,args.note,100),{'type':Variant('s','command')}])
+  File "/home/julius/fm1-probe-r3/ble_midi_bench.py", line 40, in call
+    raise RuntimeError(f'{member}: {reply.error_name}: {reply.body}')
+RuntimeError: WriteValue: org.bluez.Error.NotAuthorized: ['Operation Not Authorized']
+======
+conn_latency 0
+connections 1
+connect_invalid 0
+conn_events 81
+rx_peak 1
+establishment_fail 0
+supervision_fail 0
+disconnects 0
+last_disconnect_reason 0x00000000
+conn_updates 1
+worker_max_gap_us 1006
+worker_max_us 36
+worker_calls 2156
+nimble_synced 1
+nimble_resets 0
+nimble_error 0
+nimble_assertions 0
+nimble_event_drop 0
+nimble_acl_drop 0
+nimble_main_gap_ms 43
+nimble_mtu 200
+nimble_subscribed 0
+error 0
+stop_timeouts 0

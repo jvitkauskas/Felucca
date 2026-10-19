@@ -1,0 +1,6 @@
+283 explicit external input files; 5 compiler headers
+/root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/__stddef_max_align_t.h
+/root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/limits.h
+/root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/stdbool.h
+/root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/stddef.h
+/root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/stdint.h

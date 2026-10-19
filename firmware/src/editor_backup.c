@@ -198,6 +198,9 @@ static int ed_backup_handle(uint32_t cmd, const uint8_t *a, uint32_t n)
             const uint8_t *p = ed_bk_object(ED_BK_IDS[i], &len);
             ed_b(ED_BK_IDS[i]); ed_bk_u32(len); ed_bk_u32(st_crc32(p, len));
             fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
         }
         return 1;
     }

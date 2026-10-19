@@ -228,9 +228,15 @@ static void fl_plain_window_init(void)
 static inline uint32_t irq_save(void) { __asm__ volatile("cli" ::: "memory"); return 0; }
 static inline void irq_restore(uint32_t f) { (void)f; __asm__ volatile("csync\n\tsti" ::: "memory"); }
 
+#if FELUCCA_BLE
+static int fm1_ble_link_active(void);
+#endif
 static int fl_erase4k(uint32_t off, uint32_t *took_us)
 {
     uint32_t f = irq_save();
+#if FELUCCA_BLE
+    if(fm1_ble_link_active()) { irq_restore(f); return -8; }
+#endif
     int rc = FL_FAR(fl_erase4k_ram)(off, took_us);
     irq_restore(f);
     return rc;
@@ -245,6 +251,9 @@ static int fl_write(uint32_t off, const uint8_t *src_ram, uint32_t n)
         uint32_t f;
         if (chunk > n) chunk = n;
         f = irq_save();
+#if FELUCCA_BLE
+        if(fm1_ble_link_active()) { irq_restore(f); return -8; }
+#endif
         rc = FL_FAR(fl_prog_ram)(off, src_ram, chunk, &took);
         irq_restore(f);
         if (rc) return rc;

@@ -1,0 +1,80 @@
+Felucca BLE S2 — bench round 1 correction — 2026-10-19
+Worktree: /root/fm1/Felucca-ble
+Branch: ble-controller; HEAD remains 48ee2a0; all S2 changes uncommitted
+Input: frozen r3 + permitted reviews, pinned Apache NimBLE and explicit allowed inputs
+
+Build: FELUCCA_BLE=1 JIELI_TOOLCHAIN=/root/felucca-ble-env/jieli/toolchain AC79_SDK=/root/felucca-ble-env/sdk-min ./build.sh
+NimBLE: 1.9.0, da7e3256da3ba80b232df880f40d8359311cc62e, host only
+Controller: one peripheral, legacy connectable advertising, LE 1M, CSA#1, 27/5 ACL credits
+Security: S2 clear links; SM/encryption off; Rand returns 03 (entropy unavailable until S3)
+
+App: 487,356 / 581,564 B; free 94,208 B
+Static RAM (.data+.bss): 93,640 / 98,304 B; free 4,664 B (including section alignment)
+Pool including DMA, host buffers and fixed arena: 335,188 / 344,064 B; free 8,876 B
+Required pool spare: 8,192 B; margin above required spare 684 B
+BLE DMA: 4,340 B at 0x01c70c60 through 0x01c71d54
+Trace: 20,480 B at 0x01c00b48; 512 x 40 B
+RAMTEXT executable code: 2,888 B; unused after trace 1,208 B
+Host startup arena: 4,096 B reserved in pool; 64-bit simulation peak 784 B; zero allocation failures
+User/supervisor stack reservations unchanged: 24,320 / 7,936 B; physical high water unmeasured
+
+BLE-only feature reduction: SLICER STUT capture 4 x 4096 -> 4 x 2048 int16 samples
+Savings: 16,384 B; capture 185.8 -> 92.9 ms per track at 22.05 kHz
+Effect: long STUT steps fold/repeat sooner
+Other constraints: persistent writes refused while any link exists; disconnect before saving/updating
+Host .bss pools are mapped to .pool; BLE build uses linker GC; stock linker behavior retained
+Compared with S1: app +45,140 B; static RAM +784 B
+Added software pool use +17,024 B before the STUT saving
+
+S2 package: out/felucca-ble-s2.fwsc (609,849 B)
+Package SHA256: 69a048fad743fdcbd99459a71d09e21d799e2d9c37efb18ee4f3ff95c95e1a30
+App SHA256: a4426e6a3c03af84bcbe78425cb15808d97853ecb27027bf5118dc4ea5d42a61
+
+BLE-off build: PASS; app 417,436 B; static RAM 89,688 B; pool 330,208 B
+Stock app SHA256: bbe649ac40d6573a548c52833bbd54cbe74957703732104e70b942853c8fa3ee
+Stock package SHA256: afa34f78b27e5568a5696407560d66eb038114b9e2d40f0bf68a0da26ebd9e5a
+Both are byte-identical to the S1 documented unmodified stock baseline.
+
+Validation:
+- Final BLE-on and BLE-off target builds: PASS
+- New controller/port code: -Wall -Wextra -Werror, clean
+- Pinned host: -Wall -Wextra -Werror with scoped upstream unused-parameter,
+  sign-compare and old-clang aggregate-zero-initializer diagnostics suppressed
+- All vendor NimBLE sources remain unmodified; only the required host subset is linked
+- MMIO confined to HAL; no calls in RAM flash routines; no ROM references: PASS
+- S2 ASan/UBSan pure/controller/HCI/MIDI tests: PASS
+- Actual NimBLE integration with simulated radio: PASS
+  Discovery, MTU 200, empty read, CCCD, MIDI in/out, echo, fragmented ACL,
+  central and L2CAP updates, 40,000 15-ms events, 10 reconnects, supervision backstop
+  Zero resets/transport drops/allocation failures; five settled host credits
+- S1 advertising/calibration/H4/trace tests, default + measured-power: PASS
+- Initial S2 complete regression suite: ALL HOST TESTS PASSED (not rerun for this focused fix)
+- Final BLE render-loop target-cost budget: PASS
+- Python syntax, git diff --check, external input hashes: PASS
+
+Worker: TIMER0 1 ms IRQ 4 priority 4; radio IRQs 29/45 priority 5;
+audio 3, TIMER5 4. Controller-only worker; NimBLE and all HCI callbacks in main.
+Main-context yields serve host delivery during long display/setup/console/editor/OTA waits.
+Bench must verify actual TIMER0 operation, gap <=7.5 ms, pass <=1 ms,
+RX <=380 us, event work <=150 us, cumulative masking <=390 us per 920 us,
+stack/DMA behavior, first/update windows, missed events and instant latching.
+No RF, device, USB or network-host test was performed by the implementer.
+
+Reports: docs/BLE-S2.md, docs/SPEC-GAPS-S2.md, docs/BLE-S2-AUDIT.md
+Input manifest: out/BLE-S2-INPUT-SHA256SUMS (283 explicit permitted input files)
+
+Bench round 1 correction:
+- Parent reported good boot/NimBLE/advertising/audio; connection acceptance crashed 2/2.
+- Removed unaligned 32-bit F_WIN_LEN stores (DMA+50) from every connection/window path;
+  writes now use the r3 pair of volatile 16-bit fields at frame+0x22/+0x24.
+- New all-state TIMER0 heartbeat/gap and CON/CNT/PRD/IRQCFG readbacks distinguish
+  advertising timer activity from the original live-connection-only worker counters.
+- Persistent BLE last-stage and fault-stage/tick/count breadcrumb: 24 additional .noinit bytes.
+- Crash-screen LCD yields cannot enter the host; no radio timing/stack/guard policy change.
+- Original word store fails the UBSan alignment reproducer; actual halfword helper and
+  warm-reset breadcrumb tests pass; S1/S2 tests and target DSP budget pass.
+- Public driver headers do not name EMU_MSG bit 0; hardware correction unconfirmed.
+- No new memory/feature reductions; pool/trace/DMA/stack reservations unchanged.
+- ble host is documented as queued main-context NimBLE resynchronisation.
+- Prior bench ELF/dis/bin/package retained as build/felucca-ble-s2-bench-r1.*.
+- Root-cause evidence, diagnostic decoder and focused retest: docs/BLE-S2-BENCH-R1.md.

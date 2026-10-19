@@ -77,7 +77,7 @@ Every distribution of a package carries the licence texts with it: the release f
 ## No vendor material
 
 The firmware links no vendor object code or Bluetooth library. With the default build, the
-packages hold Felucca and the three SDK files above. The optional BLE S1 build also contains
+packages hold Felucca and the three SDK files above. The optional BLE build also contains
 numerical radio configuration tables transcribed from the frozen clean-room specification;
 see `docs/BLE-S1.md` for the precise provenance and its unresolved redistribution policy. The installer's
 "Return to official V15" holds only the official file's size and SHA-256: you select the
@@ -99,5 +99,14 @@ by those owners.
 ## Radio
 
 The default build leaves the radio disabled. `FELUCCA_BLE=1` enables the experimental
-clean-room BLE S1 controller and legacy advertising; see `docs/BLE-S1.md`. It does not
-provide a BLE MIDI host, connections, pairing, or encryption.
+clean-room BLE S2 controller, Apache NimBLE host and BLE-MIDI; see
+`docs/BLE-S2.md`. Pairing and encryption belong to S3.
+
+## Apache NimBLE host in BLE builds
+
+`firmware/third_party/nimble/` contains an offline source subset of Apache
+NimBLE 1.9.0, commit `da7e3256da3ba80b232df880f40d8359311cc62e`.
+Its original Apache-2.0 copyright notices, LICENSE and NOTICE are retained.
+Only its host, GAP/GATT services, transport memory pools and porting utilities
+are linked. The Felucca NPL, H4 glue, controller and MIDI application are
+GPL-3.0-only. See `docs/BLE-S2-AUDIT.md` and the import hash manifest.

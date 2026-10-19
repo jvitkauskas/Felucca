@@ -2,9 +2,15 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic error "-Wall"
 #pragma clang diagnostic error "-Wextra"
-/* BLE DMA/baseband HAL: frozen r2/r2b 02 §§2-7,9 and 04 §0. */
+/* BLE DMA/baseband HAL: frozen r3 02 §§2-7,9 and 04 §0. */
 #pragma once
 #include "fm1_ble_radio.h"
+#include "../ble/ble_link.h"
+#include "../ble/ble_breadcrumb.h"
+
+/* External linkage prevents the compiler treating warm-reset RAM as zero.
+ * This record is never cleared by HCI Reset or diagnostic counter resets. */
+volatile ble_breadcrumb_t fm1_ble_breadcrumb __attribute__((section(".noinit")));
 
 /* Measure only the controller's own outer critical sections. BSP blackouts
  * and the cumulative 390 us/920 us limit still require the PB3.1 bench probe. */
@@ -40,17 +46,146 @@ static struct {
     uint8_t frame_template[BLE_FRAME_SIZE];
     uint32_t stop_start,stop_bound,last_worker,last_canary;
     volatile uint8_t state,restart;
+    int8_t tx_id[2];
+    uint8_t refill_busy;
+    uint32_t rx_stamp[2];
+    uint8_t rx_delayed[2];
 } bb;
 enum { BB_FRAME=16, BB_RX0=340, BB_RX1=596, BB_TX0=852, BB_TX1=892 };
 #define BB_F16(off) (*(volatile uint16_t *)(void *)(ble_dma.bb+BB_FRAME+(off)))
 #define BB_F8(off) (*(volatile uint8_t *)(void *)(ble_dma.bb+BB_FRAME+(off)))
 #define BB_F32(off) (*(volatile uint32_t *)(void *)(ble_dma.bb+BB_FRAME+(off)))
 
+static inline void bb_mark(uint8_t stage,uint16_t detail)
+{
+    ble_breadcrumb_mark(&fm1_ble_breadcrumb,stage,bb.state,detail,fm1_ticks());
+}
+static inline void bb_mark_event(uint8_t stage) { bb_mark(stage,BB_F16(BF_EVT)); }
+static inline void bb_window_length(uint32_t us)
+{
+    bb_mark(BLE_STAGE_WINDOW,(uint16_t)us);
+    ble_frame_window_set((volatile uint16_t *)(void *)(ble_dma.bb+BB_FRAME),us);
+}
 static void bb_anchor(unsigned id,unsigned index,uint32_t value)
 {
+    bb_mark(BLE_STAGE_ANCHOR,(uint16_t)((id<<8)|index));
     uint32_t k=fm1_ble_irq_save();
     BR_R(0x28020u)=value; br_sync(); BR_R(0x2801cu)=(index<<10)|(id<<4)|5;
     fm1_ble_irq_restore(k);
+}
+static uint32_t bb_anchor_read(unsigned index)
+{
+    uint32_t k=fm1_ble_irq_save(),v;
+    BR_R(0x2801cu)=(index<<10)|2u; br_sync(); v=BR_R(0x28024u);
+    fm1_ble_irq_restore(k); return v;
+}
+static void bb_map(const uint8_t *map)
+{
+    unsigned i,n=0;
+    for(i=0;i<40;i++) {
+        BB_F8(BF_FREQ_IDX+i)=(uint8_t)i; BB_F8(BF_FREQ_TBL+i)=ble_frequency((uint8_t)i);
+        if(i>=37 || (map[i/8]&(1u<<(i%8)))) {
+            unsigned j=i>=37 ? i : n++;
+            BB_F8(BF_FREQ_USED+j)=(uint8_t)i;
+            BB_F8(BF_FREQ_USED_TBL+j)=ble_frequency((uint8_t)i);
+        }
+    }
+    BB_F16(BF_CHMAP)=ble_get16(map); BB_F16(BF_CHMAP+2)=ble_get16(map+2);
+    BB_F16(BF_CHMAP+4)=(uint16_t)((n<<5)|(map[4]&31u)); br_sync();
+}
+static void bb_refill(void)
+{
+    uint32_t k=fm1_ble_irq_save();
+    unsigned a,b,j,first;
+    if(bb.refill_busy || (bb.state!=4 && bb.state!=2)) { fm1_ble_irq_restore(k); return; }
+    bb.refill_busy=1;
+    do {
+        a=(BB_F16(BF_TX_TOGGLE)&1u)|((BB_F8(BF_TX_CTL)&1u)<<1)|((BB_F8(BF_TX_CTL+1)&1u)<<2);
+        b=(BB_F16(BF_TX_TOGGLE)&1u)|((BB_F8(BF_TX_CTL)&1u)<<1)|((BB_F8(BF_TX_CTL+1)&1u)<<2);
+    } while(a!=b);
+    first=a&1u;
+    for(j=0;j<2;j++) {
+        unsigned slot=first^j; int id; uint8_t n,llid; unsigned md;
+        if(!(a&(2u<<slot))) continue;
+        if(bb.tx_id[slot]>=0) { id=bb.tx_id[slot]; bb.tx_id[slot]=-1; ble_ll_tx_ack((unsigned)id); }
+        if(bb.state!=4 || ble_link.state>=BLE_LINK_CLOSING) continue;
+        id=ble_ll_tx_pick();
+        if(id<0) { BB_F16(BF_FLOW)&=(uint16_t)~64u; continue; }
+        n=ble_ll_tx_len((unsigned)id); llid=ble_ll_tx_llid((unsigned)id); md=(unsigned)ble_ll_acl_waiting();
+        memcpy(ble_dma.bb+(slot ? BB_TX1 : BB_TX0),ble_ll_tx_data((unsigned)id),n);
+        BB_F16(BF_TX_PTR+slot*2)=(uint16_t)(slot ? BB_TX1 : BB_TX0);
+        BB_F16(BF_TX_ADV+slot*2)=0;
+        BB_F16(BF_TX_DATA+slot*2)=(uint16_t)((BB_F16(BF_TX_DATA+slot*2)&4u)|((uint16_t)n<<8)|(md<<3)|llid);
+        BB_F16(BF_FLOW)=(uint16_t)((BB_F16(BF_FLOW)&~64u)|(md<<6));
+        bb.tx_id[slot]=(int8_t)id; br_sync(); BB_F8(BF_TX_CTL+slot)&=(uint8_t)~1u; br_sync();
+    }
+    bb.refill_busy=0; fm1_ble_irq_restore(k);
+}
+static void bb_connection(const ble_conn_t *c,uint8_t header,uint32_t now)
+{
+    bb_mark(BLE_STAGE_CONNECT,c->interval);
+    unsigned slot,t=BB_F16(BF_TX_TOGGLE)&1u;
+    uint16_t w=ble_widen(c);
+    for(slot=0;slot<2;slot++) {
+        BB_F16(BF_TX_ADV+slot*2)=(uint16_t)(((header>>7)&1u)<<4);
+        BB_F16(BF_TX_DATA+slot*2)=(uint16_t)(((slot==0 ? t : !t)<<2)|1u);
+        bb.tx_id[slot]=-1;
+    }
+    BB_F16(BF_PRIO_CTRL)=28; BB_F16(BF_PRIO_STAT)=28;
+    BB_F16(0)=0x8000; BB_F16(BF_TX_TOGGLE)&=(uint16_t)~2u; BB_F16(BF_RX_TOGGLE)=0;
+    BB_F16(10)=(uint16_t)c->aa; BB_F16(12)=(uint16_t)(c->aa>>16);
+    BB_F16(BF_CRC)=(uint16_t)c->crc; BB_F16(BF_CRC+2)=(uint16_t)(c->crc>>16);
+    BB_F16(BF_OPTIONS)=0x1c2c; BB_F16(BF_FLOW)=(uint16_t)((BB_F16(BF_FLOW)&~48u)|16u);
+    BB_F8(BF_TX_CTL)|=1; BB_F8(BF_TX_CTL+1)|=1;
+    BB_F16(0)=0x8004;
+    bb_anchor(0,5,0);
+    bb_anchor(0,4,c->offset ? ((2u*c->offset-1u)|0x8000u) : 0u);
+    /* Latency is held disabled for the first six events. */
+    bb_anchor(0,2,0x7000u|c->latency);
+    BB_F16(72)=w/625u; BB_F16(74)=(uint16_t)(0x5000u|(w%625u));
+    bb_anchor(0,8,0); bb_anchor(0,3,0); BB_F16(BF_EVT)=0;
+    bb_window_length((uint32_t)c->win*1250u+BLE_FIRST_WINDOW_EXTRA_US); BB_F16(BF_WIN_STEADY)=50;
+    bb_anchor(0,1,c->interval*2u); bb_anchor(0,15,0x8000);
+    bb_map(c->map); bb_anchor(0,6,0x8000u|((uint32_t)c->hop<<8)|c->hop);
+    for(slot=0;slot<2;slot++) {
+        BB_F16(BF_TX_DATA+2*slot)=(uint16_t)((slot!=t ? 4u : 0u)|1u);
+        BB_F8(BF_RX_CTL+slot)&=(uint8_t)~1u;
+    }
+    bb_mark(BLE_STAGE_CREATE,0);
+    ble_ll_create(c,now); bb.state=4; br_sync();
+    bb_mark(BLE_STAGE_CONNECTED,0);
+}
+static void bb_connected_rx(uint32_t stamp)
+{
+    unsigned first,a,b,j;
+    do {
+        a=(BB_F16(BF_RX_TOGGLE)&1u)|((BB_F8(BF_RX_CTL)&1u)<<1)|((BB_F8(BF_RX_CTL+1)&1u)<<2);
+        b=(BB_F16(BF_RX_TOGGLE)&1u)|((BB_F8(BF_RX_CTL)&1u)<<1)|((BB_F8(BF_RX_CTL+1)&1u)<<2);
+    } while(a!=b);
+    first=a&1u;
+    for(j=0;j<2;j++) {
+        unsigned slot=first^j,n; uint16_t status,header,event; uint32_t ts; uint8_t copy[27]; int delayed;
+        if(!(a&(2u<<slot))) continue;
+        status=BB_F16(BF_RX_STAT+2*slot); header=BB_F16(BF_RX_DATA+2*slot); event=BB_F16(BF_EVT);
+        delayed=bb.rx_delayed[slot] || (a&6u)==6u;
+        ts=bb.rx_delayed[slot] ? bb.rx_stamp[slot] : stamp;
+        /* For a delayed/both-full slot the per-slot reception time is not
+         * recoverable. Use last worker boundary as a conservative lower bound. */
+        if(!bb.rx_delayed[slot] && (a&6u)==6u) ts=ble_link.last_worker ? ble_link.last_worker : ble_link.created_at;
+        if(!ble_ll_rx_room()) {
+            if(!bb.rx_delayed[slot]) { bb.rx_delayed[slot]=1; bb.rx_stamp[slot]=ts; }
+            continue;
+        }
+        n=header>>8;
+        if(n<=sizeof copy) memcpy(copy,ble_dma.bb+(slot ? BB_RX1 : BB_RX0),n);
+        bb.rx_delayed[slot]=0;
+        BB_F16(BF_RX_PTR+2*slot)=(uint16_t)(slot ? BB_RX1 : BB_RX0);
+        br_sync(); BB_F8(BF_RX_CTL+slot)&=(uint8_t)~1u; br_sync();
+        /* Queue capacity was reserved by exclusion; hardware can now reuse
+         * this fixed DMA buffer. Decode/probe only the independent snapshot. */
+        ble_ll_rx_delayed(status,header,copy,ts,event,delayed);
+    }
+    bb_refill();
 }
 static void bb_zero_anchors(void)
 {
@@ -98,6 +233,10 @@ static void bb_rx_pending(void)
     if (!(BR_R(0x28028u)&BR_R(0x28030u)&256u)) return;
     BR_R(0x2802cu)=256; br_ssync();
     /* Closing handlers acknowledge but never publish a new payload. */
+    if(bb.state==4 || (bb.state==2 && ble_link.state!=BLE_LINK_IDLE)) {
+        ble_link.rx_seen=1; /* IRQ timing exists even when both slots wait. */
+        bb_connected_rx(fm1_ticks()); return;
+    }
     if (bb.state!=1) return;
     slot=(BB_F16(BF_RX_TOGGLE)&1u)^1u;
     code=BB_F16(BF_RX_STAT+2*slot)&15u;
@@ -112,22 +251,30 @@ static void bb_rx_pending(void)
         br_diag.scan_req++;
         for (i=0;i<3;i++) BB_F16(BF_PEER+2*i)=ble_get16(payload+2*i);
     } else if (type==5) {
-        /* S1 has no connection state. Stop future anchors immediately, then
-         * quiesce/reopen from the worker, even if the request was malformed.
-         * The hardware may end this advertising event on CONNECT_IND (A6). */
-        br_diag.connect_ignored++;
-        if (bb.state==1) { bb.restart=1; fm1_ble_stop_begin(); }
+        ble_conn_t c;
+        uint8_t h=(uint8_t)BB_F16(BF_RX_ADV+2*slot);
+        if(bb.adv.params.type==0 && ((h>>7)&1u)==bb.adv.params.own_type &&
+           !memcmp(payload+6,bb.adv.addr,6) && ble_connect_decode(&c,payload,(uint8_t)n,h)) {
+            bb_connection(&c,h,fm1_ticks());
+        } else {
+            br_diag.connect_ignored++; ble_link.diag.invalid++;
+#if BLE_INVALID_CONNECT_RESTART
+            bb.restart=1; fm1_ble_stop_begin();
+#endif
+        }
     } else if (type!=3) br_diag.bad_rx++;
     /* Advertising slots use no full flag; fixed payload buffers are retained.
      * S1 only copies the six-byte scanner address inside this interrupt. */
 }
 static void fm1_ble_rx_body(void)
 {
+    bb_mark(BLE_STAGE_RX,BB_F16(BF_EVT));
     br_diag.rx_irqs++;
     bb_rx_pending();
 }
 static void fm1_ble_event_body(void)
 {
+    bb_mark(BLE_STAGE_EVENT,BB_F16(BF_EVT));
     uint32_t pending=BR_R(0x28028u)&BR_R(0x28030u),work_start,dt;
     br_diag.event_irqs++;
     /* Equal-level arbitration must not matter: drain RX first. */
@@ -141,6 +288,27 @@ static void fm1_ble_event_body(void)
     work_start=fm1_ticks(); /* step 1a belongs to RX, not E_ev (02 §7.3a) */
     if (pending&1u) {
         BR_R(0x2802cu)=1;
+        if(bb.state==4) {
+            uint16_t event=BB_F16(BF_EVT); uint32_t now=fm1_ticks();
+            if((int32_t)(now-ble_link.time.first)>=0) {
+                ble_ll_event(event,now);
+                if(bb.state==4 && ble_link.state<BLE_LINK_CLOSING) {
+                    if(ble_link.rx_seen) {
+                        if(ble_link.acc>=BLE_MISS_STEP_US) { ble_link.acc=0; bb_window_length(ble_link.window); }
+                    } else if(ble_link.widen+ble_link.acc+BLE_MISS_STEP_US<BLE_MISS_LIMIT_US) {
+                        uint32_t raw=bb_anchor_read(0)|((bb_anchor_read(14)&255u)<<16);
+                        int f=(int)(bb_anchor_read(7)&4095u),next; unsigned drift;
+                        if(f&2048) f-=4096;
+                        if(ble_missed_step(f,raw,625u-(BR_R(0x2800cu)&1023u)-(BR_R(0x28014u)&255u),&next,&drift)) {
+                            bb_anchor(0,16,drift); bb_anchor(0,7,(uint32_t)(int32_t)(int16_t)((uint16_t)next|0x8000u));
+                            bb_window_length(ble_link.window+2u*(ble_link.acc+BLE_MISS_STEP_US));
+                            ble_link.acc+=BLE_MISS_STEP_US;
+                        }
+                    }
+                }
+                ble_link.rx_seen=ble_link.valid_seen=0;
+            }
+        }
         if (bb.state==1) {
             br_diag.adv_events++;
             if (!br_diag.first_event_ticks) br_diag.first_event_ticks=fm1_ticks();
@@ -157,12 +325,13 @@ static void fm1_ble_event_body(void)
     if (dt>150u*24u) br_diag.event_over_150us++;
     /* Sleep is never entered; do not touch its request/handshake bits. */
 }
-extern void isr_ble_rx(void),isr_ble_event(void);
+extern void isr_ble_rx(void),isr_ble_event(void),isr_ble_worker(void);
 static void fm1_ble_attach(void)
 {
     uint32_t k=fm1_ble_irq_save();
     fm1_irq_attach(29,isr_ble_rx,5); fm1_irq_mask(29);
     fm1_irq_attach(45,isr_ble_event,5); fm1_irq_mask(45);
+    fm1_irq_attach(4,isr_ble_worker,4); fm1_irq_mask(4);
     fm1_ble_irq_restore(k);
 
 }
@@ -193,6 +362,7 @@ static int fm1_ble_adv_start(const ble_adv_t *adv)
     /* Closed instance: no DMA owner or enabled peripheral source. Prepare
      * the large window outside the short publication critical section. */
     memset(ble_dma.bb,0,sizeof ble_dma.bb); bb.adv=*adv; bb.restart=0;
+    bb.tx_id[0]=bb.tx_id[1]=-1; bb.rx_delayed[0]=bb.rx_delayed[1]=0;
     bb_frame_publish(adv); bb_payloads();
     BB_F16(BF_RX_PTR)=BB_RX0; BB_F16(BF_RX_PTR+2)=BB_RX1;
     BB_F8(BF_RX_CTL)&=(uint8_t)~1u; BB_F8(BF_RX_CTL+1)&=(uint8_t)~1u;
@@ -224,10 +394,10 @@ static void fm1_ble_adv_update(const ble_adv_t *adv)
 static void fm1_ble_stop_begin(void)
 {
     uint32_t k=fm1_ble_irq_save();
-    if (bb.state!=1) { fm1_ble_irq_restore(k); return; }
+    if (bb.state!=1 && bb.state!=4) { fm1_ble_irq_restore(k); return; }
     bb.state=2; /* closing and refill exclusion under the same lock */
     bb_anchor(0,14,0); bb.stop_start=fm1_ticks();
-    bb.stop_bound=(uint32_t)bb.adv.params.max*1250u;
+    bb.stop_bound=ble_link.state!=BLE_LINK_IDLE ? (uint32_t)ble_link.conn.interval*2500u : (uint32_t)bb.adv.params.max*1250u;
     if (bb.stop_bound<20000u) bb.stop_bound=20000;
     if (bb.stop_bound>100000u) bb.stop_bound=100000;
     bb.stop_bound*=24;
@@ -246,19 +416,21 @@ static int fm1_ble_stop_poll(void)
         bb.state=3; br_diag.stop_timeouts++; br_error(7); return -1;
     }
     k=fm1_ble_irq_save();
+    bb_refill(); /* settle control-byte acknowledgements before DMA reclaim */
     BR_R(0x28028u)&=~257u;
     BR_R(0x2804cu)=(BR_R(0x2804cu)&254u)|256u; BR_R(0x2802cu)=257;
     for (i=0;i<17;i++) bb_anchor(0,i,0);
     *(volatile uint16_t *)(void *)ble_dma.bb=0; br_sync();
     fm1_ble_irq_restore(k);
-    /* Reclaim only after busy cleared and the source was masked/ACKed. */
-    memset(ble_dma.bb,0,sizeof ble_dma.bb); bb.state=0;
+    /* Reclaim only after busy cleared and the source was masked/ACKed.
+     * Zero the active descriptor only: do not burn an IRQ budget on 3.3 KB. */
+    memset(ble_dma.bb+BB_FRAME,0,BLE_FRAME_SIZE); bb.state=0;
     return 1;
 }
 static void fm1_ble_service(void)
 {
     uint32_t t=fm1_ticks(),gap=t-bb.last_worker;
-    if (bb.last_worker && gap>br_diag.worker_gap_ticks) br_diag.worker_gap_ticks=gap;
+    if (bb.last_worker && ble_link.state!=BLE_LINK_IDLE && gap>br_diag.worker_gap_ticks) br_diag.worker_gap_ticks=gap;
     bb.last_worker=t;
     if (bb.restart && bb.state!=3) {
         if (bb.state==1) fm1_ble_stop_begin();
@@ -294,6 +466,38 @@ static void fm1_ble_readback(uint32_t *out)
     for (i=0;i<10;i++) out[39+i]=BR_R(0x14040u+4*i);
     out[49]=BR_R(0x20000u);
 }
+/* TIMER0 is reserved by the BLE build, crystal/4, 1 ms, IRQ 4 priority 4.
+ * Both radio IRQs (5) preempt it; it preempts audio (3). TIMER5 (4) and
+ * this worker do not preempt each other, so no host/USB data are touched here. */
+static void fm1_ble_worker_timer_start(void)
+{
+    uint32_t k=fm1_ble_irq_save();
+    BR_R(0x10400u)=0x4000u; BR_R(0x10404u)=0; BR_R(0x10408u)=6000u;
+    fm1_ble_line_enable(4); BR_R(0x10400u)=0x4019u;
+    fm1_ble_irq_restore(k);
+}
+static void fm1_ble_worker_timer_ack(void) { BR_R(0x10400u)|=0x4000u; }
+static void fm1_ble_worker_timer_readback(uint32_t out[4])
+{
+    out[0]=BR_R(0x10400u); out[1]=BR_R(0x10404u); out[2]=BR_R(0x10408u);
+    out[3]=(FM1_ICFG(4)>>16)&15u;
+}
+static void bb_window(uint32_t us) { bb_window_length(us); BB_F16(BF_WIN_STEADY)=BLE_WINDOW_PAD_US; }
+static void bb_priority(unsigned p) { BB_F16(BF_PRIO_CTRL)=(uint16_t)p; BB_F16(BF_PRIO_STAT)=(uint16_t)p; }
+static void bb_latency(uint16_t latency,int enabled)
+{
+    bb_anchor(0,2,0x7000u|latency|((enabled && latency) ? 0x800u : 0u));
+    bb_anchor(0,9,64u);
+}
+static void bb_apply(uint8_t kind,const ble_conn_t *c,uint16_t widening,uint32_t window)
+{
+    if(kind==2) { bb_map(c->map); return; }
+    bb_window(window); bb_latency(c->latency,0);
+    BB_F16(72)=widening/625u; BB_F16(74)=(uint16_t)(0x5000u|(widening%625u));
+    bb_anchor(0,4,c->offset ? (2u*c->offset-1u)|0x8000u : 0u);
+    bb_anchor(0,1,c->interval*2u); bb_anchor(0,15,0x8000u);
+}
+static int fm1_ble_link_active(void) { return ble_link.state!=BLE_LINK_IDLE; }
 #undef BB_F16
 #undef BB_F8
 #undef BB_F32

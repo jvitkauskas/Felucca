@@ -11,6 +11,10 @@
 #define LCD_BAUD 4u                /* lsb/(BAUD+1): 4 = 12 MHz */
 #endif
 
+#if FELUCCA_BLE
+static void ble_platform_yield(void);
+static void ble_platform_delay(uint32_t ms);
+#endif
 static uint8_t lcd_small[64];
 static uint8_t lcd_busy;           /* a lcd_data DMA may still run; CS is low */
 
@@ -22,6 +26,9 @@ static void lcd_spin(uint32_t n)
 
 static void lcd_sync(void)          /* finish the running transfer (before touching its buffer) */
 {
+#if FELUCCA_BLE
+    ble_platform_yield();
+#endif
     if (!lcd_busy)
         return;
     fm1_lcd_wait();

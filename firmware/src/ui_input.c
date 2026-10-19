@@ -1051,6 +1051,9 @@ static void panel_setup(void)
     setup_title();
     while (fm1_in.buttons) {                             /* wait for OCT-/OCT+ release */
         fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
         if (fm1_ms - t0 > SETUP_IDLE_MS)
             goto timeout;
     }
@@ -1061,6 +1064,9 @@ static void panel_setup(void)
         t0 = fm1_ms;
         while (!(p & ~used)) {
             fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
             p |= fm1_input_edges(0);
             if (fm1_ms - t0 > SETUP_IDLE_MS)
                 goto timeout;
@@ -1081,6 +1087,9 @@ static void panel_setup(void)
         t0 = fm1_ms;
         for (;;) {
             fm1_wdt_feed();
+#if FELUCCA_BLE
+        ble_platform_yield();
+#endif
             if (fm1_ms - t0 > SETUP_IDLE_MS)
                 goto timeout;
             for (e = 0; e < 7u; e++)
@@ -1092,7 +1101,11 @@ static void panel_setup(void)
         panel.enc[i] = (uint8_t)e;
         panel.dir[i] = (int8_t)(st > 0 ? 1 : -1);
         used |= 1u << e;
+#if FELUCCA_BLE
+        ble_platform_delay(300);
+#else
         fm1_delay_ms(300);
+#endif
         fm1_enc_take(e);
     }
     panel.magic = PANEL_MAGIC;
