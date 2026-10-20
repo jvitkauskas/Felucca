@@ -92,3 +92,56 @@ The downloaded public text and HTML are retained in out/s3.1-core54-hci.*.
     The historical journal uses 30 records plus an untouched 256-byte tail;
     05's references to 32 slots are descriptive bench shorthand, not a format
     change. No on-device data was read during this task.
+
+
+## Round 2 / r6 — review before correction (2026-10-20)
+
+14. **Withdraw the r5 legacy fallback.** Frozen r6 03 §3.6 item 2 agrees
+    with retained Core 5.4 Vol 4 Part E §§7.7.65.1 and 7.7.65.10: legacy
+    reports the received address, including a resolved RPA as type 01. Only
+    Enhanced v1 carries identity 02/03 plus peer RPA. Local RPA is zero for
+    own-public; unresolved Enhanced events have a zero peer-RPA field. Bit 9
+    selects Enhanced instead of legacy, independently of bit 0. The outer
+    LE Meta mask still gates delivery. NimBLE ble_hs_conn.c keeps OTA and
+    identity separately; c1/f5/f6 require the former. Round-1 F-24 success did
+    not establish repeat-pairing correctness.
+15. **Mask and cache belong to every host sync.** Pinned ble_hs_startup.c
+    starts with LE mask 001F at HCI 4.0. In the application sync callback,
+    send 021F through ble_hs_hci_cmd_tx before enabling advertising; failure
+    leaves advertising stopped and requests host reset. Keep the established
+    local-IRK callback's privacy-cache reset, so startup restores enable/local
+    and stored peer entries after both HCI reset and console `ble host`.
+    Neither the HCI nor LL version changes (B23 remains a hypothesis).
+16. **Deletion without link termination.** ble_store_util_delete_peer only
+    deletes records; ble_gap_unpair first terminates a matching live link.
+    Use the pinned ble_hs_pvcy_remove_entry (preempts GAP procedures, sends
+    2028, tolerates absent-entry status 02), then delete the records. Repeated
+    pairing retries only after success. Route application replacement and
+    explicit unpair through the same helper, including store-overflow policy;
+    CCCD-only deletion is not peer unpair. Preserve upstream sources unchanged.
+17. **W_item attribution and honest evidence.** The round-1 164/226-us
+    samples cannot be assigned retrospectively: neither kind nor opcode was
+    retained. Main-context K-11/AES selftests, ECC and bond load/flush cannot
+    have set that counter. Executor LE Rand and LL_ENC_REQ perform multiple
+    software SHA compressions; advertising enable clears 3690 bytes and builds
+    and publishes the frame. Split these into resumable work. Record kinds,
+    per-kind maxima/counts/overruns and command opcode for maxima, rather than
+    treating a virtual clock or an instruction count as a silicon measurement.
+    Keep failed-item attribution and own-time preemption rules. One AES/CCM,
+    one SHA compression and bounded preparation slices are units for bench
+    qualification; physical <=100 us still requires F-27 on the new image.
+18. **Remaining r6 ambiguities.** Retain round-1 choices 2–6 and 13: the
+    N_RL-1 assertion assumes a zero-peer-IRK local entry; arbitrary clients can
+    fill all four with nonzero IRKs. Keep one comparison/AES per resolution
+    step and safe N_RL bound. The own-address 11/12 discrepancy and the one-
+    sector journal crash window remain. No spec file is edited. H-25 gains
+    mask combinations and unresolved Enhanced cases; F-28 uses real host SMP
+    in both legacy and SC with retained and changed peer IRKs.
+19. **Changed IRK plus new RPA (demonstrated by F-28).** An unresolved
+    connection is not recognized as repeat pairing at Pairing Request. Pinned
+    ble_sm_persist_keys resolves identity during key distribution and writes
+    OUR_SEC before PEER_SEC. The application store adapter detects replacement
+    of an existing OUR_SEC LTK, removes the old list entry and records before
+    either new direction is saved, then allows NimBLE's 2027. Both real legacy
+    and SC tests pass this case, in addition to stale-listed-IRK repeats.
+    Store overflow and explicit/absent unpair preserve live encrypted ATT.

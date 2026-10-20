@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include "tinycrypt/aes.h"
+#include "tinycrypt/sha256.h"
 #include "ble_s3_sim.h"
 #include "../firmware/ble/ble_seed.h"
 #include "../firmware/ble/ble_crypto.h"
@@ -9,6 +10,21 @@ uint8_t sim_flash[12288];
 int sim_flash_fault,sim_flash_idle=1,sim_flash_mismatch,sim_aes_fault;
 unsigned sim_erases[3],sim_programs[3];
 static struct tc_aes_key_sched_struct aes;
+uint32_t sim_sha_compressions,sim_sha_cost_ticks;
+int __real_tc_sha256_update(TCSha256State_t s,const uint8_t *p,size_t n);
+int __real_tc_sha256_final(uint8_t *p,TCSha256State_t s);
+int __wrap_tc_sha256_update(TCSha256State_t s,const uint8_t *p,size_t n)
+{
+    unsigned blocks=(unsigned)((s->leftover_offset+n)/64u);
+    int rc=__real_tc_sha256_update(s,p,n);
+    sim_sha_compressions+=blocks; sim_ticks+=blocks*sim_sha_cost_ticks; return rc;
+}
+int __wrap_tc_sha256_final(uint8_t *p,TCSha256State_t s)
+{
+    unsigned blocks=s->leftover_offset>=56 ? 2u : 1u;
+    int rc=__real_tc_sha256_final(p,s);
+    sim_sha_compressions+=blocks; sim_ticks+=blocks*sim_sha_cost_ticks; return rc;
+}
 int ble_port_aes_begin(const uint8_t key[16]) { return !sim_aes_fault && tc_aes128_set_encrypt_key(&aes,key); }
 int ble_port_aes_block(const uint8_t in[16],uint8_t out[16]) { return !sim_aes_fault && tc_aes_encrypt(out,in,&aes); }
 void ble_port_aes_end(void) { }

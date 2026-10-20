@@ -17,7 +17,8 @@ def compile(p,flags=()):
     return obj
 def run(name,objects,args=()):
     exe=out/name
-    subprocess.run([cc,'-no-pie','-fsanitize=address,undefined','-Wl,--gc-sections',*map(str,objects),'-o',str(exe)],check=True)
+    subprocess.run([cc,'-no-pie','-fsanitize=address,undefined','-Wl,--gc-sections',
+                    '-Wl,--wrap=tc_sha256_update,--wrap=tc_sha256_final',*map(str,objects),'-o',str(exe)],check=True)
     subprocess.run([str(exe),*args],check=True)
 base=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_logic','ble_controller','ble_link_logic','ble_link','ble_midi','ble_heap','ble_crypto','ble_seed','ble_bonds','ble_timing','ble_privacy')]
 sim=[compile(Path('tests')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_s2_sim','ble_s3_sim')]
@@ -28,5 +29,5 @@ run('s2-regression',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s2_integra
 integration=compile(Path('tests/ble_s3_integration.c'),nb.flags(vendor=False))
 if s31:
     run('privacy-store-timing', [*base,*sim,*vendor,*port,compile(Path('tests/ble_s31_test.c'),nb.flags(vendor=False))])
-for mode in (('legacy','sc','rpa') if s31 else ('legacy','sc')):
+for mode in (('legacy','sc','rpa','repeat-legacy','repeat-sc') if s31 else ('legacy','sc')):
     run('pairing-'+mode,[*base,*sim,*vendor,*port,integration],[mode])

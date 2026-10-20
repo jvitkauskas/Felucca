@@ -19,7 +19,7 @@ static struct {
     command_t q[4];
     unsigned r,w,count;
     ble_host_fn host;
-    uint8_t pub[6],random[6],random_set,masks[2][8];
+    uint8_t pub[6],random[6],random_set,masks[2][8],random_pending,start_pending;
     ble_adv_t adv;
     ble_diag_t diag;
     uint16_t deferred;
@@ -217,7 +217,8 @@ static void execute(const command_t *cmd)
     case 0x201c: memset(data,0,8); data[0]=0x85; n=8; break;
 #if FELUCCA_BLE_STAGE >= 3
     case 0x2017: if(!ble_aes_le(p,p+16,data)) status=3; else n=16; break;
-    case 0x2018: ble_seed_rand_called(); if(!ble_entropy(data,8)) status=3; else n=8; break;
+    case 0x2018:
+        ble_seed_rand_called(); ctl.random_pending=1; ble_port_pend(); return;
 #if FELUCCA_BLE_S31
     case 0x202a: data[0]=BLE_RL_CAPACITY; n=1; break;
     case 0x2027: case 0x2028: case 0x2029: case 0x202d: case 0x204e: {
@@ -270,7 +271,9 @@ static void execute(const command_t *cmd)
             else if (ble_port_failed()) status=3;
             else {
                 memcpy(ctl.adv.addr,addr,6);
-                status=ble_port_start(&ctl.adv) ? 3 : 0;
+                int rc=ble_port_start(&ctl.adv);
+                if(rc>0) { ctl.deferred=op; ctl.start_pending=1; ble_port_pend(); return; }
+                status=rc<0 ? 3 : 0;
                 if (!status) ctl.diag.enabled=1;
             }
         }
@@ -328,7 +331,10 @@ static void link_deliver(void)
 #if FELUCCA_BLE_S31
         if(type==4 && b[0]==0x3e && b[2]==1 && (ctl.masks[1][1]&2u)) {
             memcpy(b+26,b+14,7); memset(b+14,0,12);
-            if(ble_link.peer_resolved) { b[7]+=2; memcpy(b+20,ble_link.conn.peer,6); }
+            if(ble_link.peer_resolved) {
+                b[7]=(uint8_t)(ble_link.peer_identity_type+2u);
+                memcpy(b+8,ble_link.peer_identity,6); memcpy(b+20,ble_link.conn.peer,6);
+            }
             b[1]=31; b[2]=10; n=33;
         }
 #endif
@@ -347,31 +353,67 @@ void ble_worker(void)
 {
     uint32_t item;
     if(!ble_time_budget()) { ble_port_pend(); return; }
+#if FELUCCA_BLE_STAGE >= 3
+    ble_entropy_step();
+    if(!ble_time_budget()) { ble_port_pend(); return; }
+    if(ctl.random_pending) {
+        uint8_t random[8]; int rc;
+        item=ble_time_item_begin(); rc=ble_entropy_request(BLE_RANDOM_HCI,random,sizeof random);
+        if(rc) { ctl.random_pending=0; complete(0x2018,rc<0 ? 3 : 0,random,rc<0 ? 0 : sizeof random,0); }
+        ble_secure_zero(random,sizeof random); ble_time_item_end(item,BLE_WORK_COMMAND,0x2018);
+        if(!rc || ctl.count || ctl.overflow_count) ble_port_pend();
+        return;
+    }
+#endif
     if (ctl.deferred) {
+        if(ctl.start_pending) {
+            int rc; item=ble_time_item_begin(); rc=ble_port_start(&ctl.adv);
+            if(rc<=0) {
+                ctl.start_pending=0; ctl.deferred=0;
+                if(!rc) ctl.diag.enabled=1;
+                complete(0x200a,rc<0 ? 3 : 0,0,0,0);
+            }
+            if(rc>0 || ctl.count || ctl.overflow_count) ble_port_pend();
+            ble_time_item_end(item,BLE_WORK_ADV_PREP,0x200a); return;
+        }
         int rc; item=ble_time_item_begin(); rc=ble_port_stop_poll();
         uint16_t op;
-        if (!rc) { ble_time_item_end(item); return; }
+        if (!rc) { ble_port_pend(); ble_time_item_end(item,BLE_WORK_STOP,ctl.deferred); return; }
         op=ctl.deferred; ctl.deferred=0; ctl.diag.stopping=0; ctl.diag.enabled=0;
         if (op==0x0c03 && rc>0) reset_finish();
         complete(op,rc<0 ? 3 : 0,0,0,0);
-        ble_time_item_end(item);
+        if(ctl.count || ctl.overflow_count) ble_port_pend();
+        ble_time_item_end(item,BLE_WORK_STOP,op);
         return;
     }
     if(ctl.overflow_count) {
         item=ble_time_item_begin();
         uint32_t key=ble_port_lock(); uint16_t op=ctl.overflow_op[ctl.overflow_r++%128u];
         ctl.overflow_count--; ble_port_unlock(key); complete(op,0x0c,0,0,1);
-        ble_time_item_end(item);
+        ble_time_item_end(item,BLE_WORK_COMMAND,op);
     }
-    if(ble_time_budget()) { item=ble_time_item_begin(); link_deliver(); ble_time_item_end(item); }
-    if(ble_time_budget()) { item=ble_time_item_begin(); driver_pass(); ble_time_item_end(item); }
+    if(ble_time_budget()) {
+        ble_work_kind_t kind=BLE_WORK_DELIVERY;
+#if FELUCCA_BLE_S31
+        uint32_t epoch=ble_link.epoch; uint8_t index=ble_link.resolve_index;
+        if(ble_link.created_pending && !ble_link.resolve_done) kind=BLE_WORK_RESOLUTION;
+#endif
+        item=ble_time_item_begin(); link_deliver();
+#if FELUCCA_BLE_S31
+        /* Include an acceptance interrupt immediately before the poll lock. */
+        if(index!=ble_link.resolve_index ||
+           (epoch!=ble_link.epoch && ble_link.created_pending && ble_link.resolve_index)) kind=BLE_WORK_RESOLUTION;
+#endif
+        ble_time_item_end(item,kind,0);
+    }
+    if(ble_time_budget()) { item=ble_time_item_begin(); driver_pass(); ble_time_item_end(item,BLE_WORK_DRIVER,0); }
     if (ctl.count && ble_time_budget()) {
         item=ble_time_item_begin();
         uint32_t key=ble_port_lock();
         command_t cmd=ctl.q[ctl.r];
         ctl.r=(ctl.r+1u)%4; ctl.count--; ble_port_unlock(key);
         execute(&cmd);
-        ble_time_item_end(item);
+        ble_time_item_end(item,ctl.start_pending ? BLE_WORK_ADV_PREP : BLE_WORK_COMMAND,ble_get16(cmd.data));
     }
     if(ctl.count || ctl.overflow_count || ctl.deferred || ble_ll_pending()) ble_port_pend();
 }

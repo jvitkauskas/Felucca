@@ -59,6 +59,8 @@ static struct {
     volatile uint8_t state,restart;
     int8_t tx_id[2];
     uint8_t refill_busy;
+    uint8_t start_phase;
+    uint16_t start_offset;
     uint32_t rx_stamp[2]; /* t_free: never changed while a slot remains full */
     uint8_t rx_delayed[2];
 } bb;
@@ -276,18 +278,18 @@ static void bb_remap(void)
         br_sync(); BB_F8(BF_TX_CTL+slot)&=(uint8_t)~1u; br_sync();
     }
 }
-static void bb_frame_publish(const ble_adv_t *adv)
+static void bb_frame_publish_step(void)
 {
-    unsigned i;
+    unsigned i=bb.start_offset,end=i+64u;
+    if(end>BLE_FRAME_SIZE) end=BLE_FRAME_SIZE;
     /* Build software bytes off-DMA, then store each hardware field at its
      * specified width while stopped. The instance-table entry is still zero. */
-    ble_frame_init(bb.frame_template,adv);
-    for (i=0;i<100;i+=2) BB_F16(i)=ble_get16(bb.frame_template+i);
-    for (i=100;i<264;i++) BB_F8(i)=bb.frame_template[i];
-    for (i=264;i<288;i+=2) BB_F16(i)=ble_get16(bb.frame_template+i);
-    for (i=288;i<312;i+=4) BB_F32(i)=ble_get32(bb.frame_template+i);
-    for (i=312;i<320;i+=2) BB_F16(i)=ble_get16(bb.frame_template+i);
-    BB_F32(320)=ble_get32(bb.frame_template+320);
+    while(i<end) {
+        if(i>=100 && i<264) { BB_F8(i)=bb.frame_template[i]; i++; }
+        else if((i>=288 && i<312) || i>=320) { BB_F32(i)=ble_get32(bb.frame_template+i); i+=4; }
+        else { BB_F16(i)=ble_get16(bb.frame_template+i); i+=2; }
+    }
+    bb.start_offset=(uint16_t)i;
 }
 static void bb_payloads(void)
 {
@@ -435,12 +437,29 @@ static int fm1_ble_adv_start(const ble_adv_t *adv)
     if (BR_R(0x28038u)&2u) { br_error(6); return -1; }
     /* Closed instance: no DMA owner or enabled peripheral source. Prepare
      * the large window outside the short publication critical section. */
-    memset(ble_dma.bb,0,sizeof ble_dma.bb); bb.adv=*adv; bb.restart=0;
-    bb.tx_id[0]=bb.tx_id[1]=-1; bb.rx_delayed[0]=bb.rx_delayed[1]=0;
-    bb_frame_publish(adv); bb_payloads();
-    BB_F16(BF_RX_PTR)=BB_RX0; BB_F16(BF_RX_PTR+2)=BB_RX1;
-    BB_F8(BF_RX_CTL)&=(uint8_t)~1u; BB_F8(BF_RX_CTL+1)&=(uint8_t)~1u;
-    bb_remap();
+    if(!bb.start_phase) {
+        bb.adv=*adv; bb.start_offset=0; bb.start_phase=1;
+        bb.tx_id[0]=bb.tx_id[1]=-1; bb.rx_delayed[0]=bb.rx_delayed[1]=0;
+    }
+    if(bb.start_phase==1) {
+        unsigned n=sizeof ble_dma.bb-bb.start_offset;
+        if(n>256) n=256;
+        memset(ble_dma.bb+bb.start_offset,0,n); bb.start_offset=(uint16_t)(bb.start_offset+n);
+        if(bb.start_offset==sizeof ble_dma.bb) bb.start_phase=2;
+        return 1;
+    }
+    if(bb.start_phase==2) {
+        ble_frame_init(bb.frame_template,&bb.adv); bb.start_offset=0; bb.start_phase=3; return 1;
+    }
+    if(bb.start_phase==3) {
+        bb_frame_publish_step(); if(bb.start_offset==BLE_FRAME_SIZE) bb.start_phase=4;
+        return 1;
+    }
+    if(bb.start_phase==4) {
+        bb_payloads(); BB_F16(BF_RX_PTR)=BB_RX0; BB_F16(BF_RX_PTR+2)=BB_RX1;
+        BB_F8(BF_RX_CTL)&=(uint8_t)~1u; BB_F8(BF_RX_CTL+1)&=(uint8_t)~1u;
+        bb_remap(); bb.start_phase=5; return 1;
+    }
     k=fm1_ble_irq_save();
     /* P6: attach left these CPU lines masked throughout P2/P3/P4. */
     fm1_ble_line_enable(29); fm1_ble_line_enable(45);
@@ -457,6 +476,7 @@ static int fm1_ble_adv_start(const ble_adv_t *adv)
     br_diag.enable_ticks=fm1_ticks(); br_diag.first_event_ticks=0;
     bb_anchor(0,14,0x8000); BB_F16(BF_MODE)|=4;
     br_sync(); fm1_ble_irq_restore(k);
+    bb.start_phase=0;
     return 0;
 }
 static void fm1_ble_adv_update(const ble_adv_t *adv)
@@ -510,8 +530,9 @@ static void fm1_ble_service(void)
         if (bb.state==1) fm1_ble_stop_begin();
         if (fm1_ble_stop_poll()==1) {
             ble_adv_t adv=bb.adv;
-            bb.restart=0; br_diag.restarts++;
-            fm1_ble_adv_start(&adv);
+            int rc=fm1_ble_adv_start(&adv);
+            if(rc<=0) { bb.restart=0; br_diag.restarts++; }
+            else ble_port_pend();
         }
     }
     if ((uint32_t)(t-bb.last_canary)>=24000000u) {

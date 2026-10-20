@@ -5,6 +5,7 @@
 #include "ble_crypto.h"
 #include "ble_link.h"
 #include "ble_memory.h"
+#include "ble_timing.h"
 #include "tinycrypt/sha256.h"
 static struct {
     uint8_t pool[32],key[32]; uint32_t counter,since_reseed;
@@ -14,6 +15,11 @@ static struct {
     volatile uint32_t w,r;
     uint32_t previous_tick;
 } rng __attribute__((section(".pool.ble")));
+static struct {
+    struct tc_sha256_state_struct hash;
+    uint8_t input[70],block[32],result[32];
+    uint8_t owner,n,stage,phase,length,discard;
+} random_job __attribute__((section(".pool.ble")));
 uint32_t ble_crc32(const uint8_t *p,unsigned n)
 {
     uint32_t crc=0xffffffffu; unsigned j;
@@ -68,6 +74,7 @@ void ble_seed_boot(const uint8_t address[6],uint32_t reset,uint32_t r64lo,uint32
     int selected=-1,last[2]={-1,-1},any[2]={0,0},target,slot,erase=0,rc;
     unsigned area,i; uint32_t duration=0,off; uint8_t retry=0;
     memset(&rng,0,sizeof rng);
+    ble_secure_zero(&random_job,sizeof random_job);
     if(!hash_selftest() || !drbg_selftest() || !ble_crypto_selftest()) { rng.diag.state=BLE_SEED_FAILED; return; }
     for(area=0;area<2;area++) for(i=0;i<60;i++) {
         if(ble_port_flash_read(0x94000u+area*4096u+i*64u,candidate,64)) continue;
@@ -135,7 +142,7 @@ void ble_entropy_poll(void)
 int ble_entropy(uint8_t *out,unsigned n)
 {
     uint8_t block[32],counter[4]; unsigned take;
-    if(rng.diag.state==BLE_SEED_FAILED) return 0;
+    if(rng.diag.state==BLE_SEED_FAILED || random_job.stage) return 0;
     if(rng.connection_reseed || rng.since_reseed>=65536u) {
         hash_parts(rng.key,0x30,rng.key,32,rng.pool,32);
         rng.connection_reseed=0; rng.since_reseed=0; rng.diag.reseed_attempts++;
@@ -148,6 +155,74 @@ int ble_entropy(uint8_t *out,unsigned n)
         if(!rng.counter) rng.counter=1; /* a freshly rekeyed generator, no nonce reuse */
     }
     ble_secure_zero(block,sizeof block); return 1;
+}
+/* Preserve hash_parts' byte framing and generator rekeying. Each call to
+ * step executes at most ONE TinyCrypt SHA compression, even for a 70-byte
+ * reseed/rekey input (update 64 bytes, then finalise the remaining six). */
+static void random_hash(uint8_t label,const uint8_t *a,unsigned an,const uint8_t *b,unsigned bn)
+{
+    uint8_t *p=random_job.input;
+    p[0]=label; ble_put16(p+1,(uint16_t)an); memcpy(p+3,a,an);
+    p[3+an]=(uint8_t)(label^0x80u); ble_put16(p+4+an,(uint16_t)bn);
+    if(bn) memcpy(p+6+an,b,bn);
+    random_job.length=(uint8_t)(6u+an+bn); random_job.phase=0;
+    tc_sha256_init(&random_job.hash);
+}
+int ble_entropy_request(unsigned owner,uint8_t *out,unsigned n)
+{
+    if(rng.diag.state==BLE_SEED_FAILED || !owner || owner>BLE_RANDOM_LINK || !n || n>32) return -1;
+    if(random_job.stage) {
+        if(random_job.owner!=owner || random_job.discard) return 0;
+        if(random_job.n!=n) return -1;
+        if(random_job.stage!=4) return 0;
+        memcpy(out,random_job.result,n); ble_secure_zero(&random_job,sizeof random_job); return 1;
+    }
+    random_job.owner=(uint8_t)owner; random_job.n=(uint8_t)n;
+    if(rng.connection_reseed || rng.since_reseed>=65536u) {
+        random_job.stage=1; rng.connection_reseed=0; rng.since_reseed=0; rng.diag.reseed_attempts++;
+        random_hash(0x30,rng.key,32,rng.pool,32);
+    } else {
+        uint8_t counter[4]; ble_put32(counter,rng.counter++);
+        random_job.stage=2; random_hash(0x31,rng.key,32,counter,4);
+    }
+    ble_port_pend(); return 0;
+}
+void ble_entropy_cancel(unsigned owner)
+{
+    if(random_job.owner!=owner) return;
+    if(random_job.stage==4) ble_secure_zero(&random_job,sizeof random_job);
+    else random_job.discard=1; /* Finish rekey; never rewind consumed counters. */
+}
+void ble_entropy_step(void)
+{
+    uint32_t item; ble_work_kind_t kind; uint8_t digest[32];
+    if(!random_job.stage || random_job.stage==4) return;
+    kind=random_job.stage==1 ? BLE_WORK_ENTROPY_RESEED :
+        random_job.stage==2 ? BLE_WORK_ENTROPY_OUTPUT : BLE_WORK_ENTROPY_REKEY;
+    item=ble_time_item_begin();
+    if(!random_job.phase && random_job.length>=64) {
+        tc_sha256_update(&random_job.hash,random_job.input,64); random_job.phase=1;
+    } else {
+        unsigned offset=random_job.phase ? 64u : 0;
+        tc_sha256_update(&random_job.hash,random_job.input+offset,random_job.length-offset);
+        tc_sha256_final(digest,&random_job.hash);
+        if(random_job.stage==1) {
+            uint8_t counter[4]; memcpy(rng.key,digest,32); ble_put32(counter,rng.counter++);
+            random_job.stage=2; random_hash(0x31,rng.key,32,counter,4);
+        } else if(random_job.stage==2) {
+            memcpy(random_job.result,digest,random_job.n);
+            memcpy(random_job.block,digest,32); random_job.stage=3;
+            random_hash(0x32,rng.key,32,random_job.block,32);
+        } else {
+            memcpy(rng.key,digest,32); if(!rng.counter) rng.counter=1;
+            rng.diag.bytes+=random_job.n; rng.since_reseed+=random_job.n;
+            random_job.stage=4;
+        }
+    }
+    ble_secure_zero(digest,sizeof digest);
+    ble_time_item_end(item,kind,random_job.owner==BLE_RANDOM_HCI ? 0x2018 : 0);
+    if(random_job.stage==4 && random_job.discard) ble_secure_zero(&random_job,sizeof random_job);
+    if(random_job.stage && random_job.stage!=4) ble_port_pend();
 }
 void ble_seed_rand_called(void) { rng.diag.rand_calls++; }
 void ble_seed_reset_stats(void)

@@ -21,6 +21,10 @@ void ble_host_midi_out(uint32_t usb_packet,uint32_t ms);
 int ble_host_midi_take(uint32_t *usb_packet,uint32_t *ms);
 void ble_host_wait_step(void);
 void ble_host_assert(const char *file,int line);
+#if FELUCCA_BLE_STAGE >= 3
+/* Application unpair/replacement: remove privacy entry and records, keep link. */
+int ble_host_delete_bond(uint8_t identity_type,const uint8_t identity[6]);
+#endif
 #if FELUCCA_BLE_S31
 void ble_host_local_irk(const uint8_t address[6],uint8_t irk[16]);
 #endif

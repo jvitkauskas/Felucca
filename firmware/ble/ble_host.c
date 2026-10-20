@@ -21,6 +21,7 @@
 #include "ble_seed.h"
 #include "ble_security.h"
 #include "ble_crypto.h"
+extern int ble_hs_pvcy_remove_entry(uint8_t type,const uint8_t *addr);
 #if FELUCCA_BLE_S31
 #include "tinycrypt/sha256.h"
 extern void ble_hs_pvcy_reset(void); /* pinned host cache, reset at each startup */
@@ -115,7 +116,8 @@ static int gap_event(struct ble_gap_event *event,void *arg)
     case BLE_GAP_EVENT_REPEAT_PAIRING: {
         struct ble_gap_conn_desc desc;
         if(ble_gap_conn_find(event->repeat_pairing.conn_handle,&desc)) return BLE_GAP_REPEAT_PAIRING_IGNORE;
-        (void)ble_store_util_delete_peer(&desc.peer_id_addr);
+        int rc=ble_host_delete_bond(desc.peer_id_addr.type,desc.peer_id_addr.val);
+        if(rc) { diag.error=(uint32_t)rc; return BLE_GAP_REPEAT_PAIRING_IGNORE; }
         return BLE_GAP_REPEAT_PAIRING_RETRY;
     }
 #endif
@@ -136,7 +138,18 @@ static void advertise(void)
     if(rc) { diag.error=(uint32_t)rc; restart_at=ble_port_ms()+1000u; }
     else advertise_pending=0;
 }
-static void synced(void) { diag.synced=1; diag.syncs++; advertise_pending=1; restart_at=ble_port_ms(); }
+static void synced(void)
+{
+#if FELUCCA_BLE_S31
+    /* Pinned HCI-4.0 startup mask 001F plus Enhanced Connection Complete.
+     * This callback runs after every host startup, before advertising. */
+    static const uint8_t mask[8]={0x1f,2,0,0,0,0,0,0};
+    extern int ble_hs_hci_cmd_tx(uint16_t,const void *,uint8_t,void *,uint8_t);
+    int rc=ble_hs_hci_cmd_tx(0x2001,mask,sizeof mask,0,0);
+    if(rc) { diag.error=(uint32_t)rc; advertise_pending=0; ble_hs_sched_reset(rc); return; }
+#endif
+    diag.error=0; diag.synced=1; diag.syncs++; advertise_pending=1; restart_at=ble_port_ms();
+}
 static void reset(int reason) { diag.resets++; diag.error=(uint32_t)reason; diag.synced=diag.subscribed=0; }
 static int gen_key(uint8_t key,struct ble_store_gen_key *out,uint16_t conn)
 {
@@ -163,6 +176,62 @@ void ble_host_local_irk(const uint8_t address[6],uint8_t irk[16])
     tc_sha256_init(&s); tc_sha256_update(&s,domain,sizeof domain-1u);
     tc_sha256_update(&s,address,6); tc_sha256_final(digest,&s);
     memcpy(irk,digest,16); irk[0]|=1; ble_secure_zero(digest,sizeof digest);
+}
+#endif
+/* All application peer deletions, including overflow replacement, use this
+ * path. ble_gap_unpair would terminate the live repeat-pairing connection. */
+#if FELUCCA_BLE_STAGE >= 3
+int ble_host_delete_bond(uint8_t identity_type,const uint8_t identity[6])
+{
+    ble_addr_t addr; int rc;
+    if(identity_type>BLE_ADDR_RANDOM_ID) return BLE_HS_EINVAL;
+    addr.type=identity_type&1u; memcpy(addr.val,identity,6);
+#if FELUCCA_BLE_S31
+    rc=ble_hs_pvcy_remove_entry(addr.type,addr.val);
+    if(rc && rc!=BLE_HS_ERR_HCI_BASE+BLE_ERR_UNK_CONN_ID) return rc;
+#endif
+    rc=ble_store_util_delete_peer(&addr);
+    if(!rc) bond_flush_due=1;
+    return rc;
+}
+static int store_write(int type,const union ble_store_value *value)
+{
+#if FELUCCA_BLE_S31
+    if(type==BLE_STORE_OBJ_TYPE_OUR_SEC && value->sec.ltk_present) {
+        union ble_store_key key; union ble_store_value old; int rc;
+        memset(&key,0,sizeof key); key.sec.peer_addr=value->sec.peer_addr;
+        /* A new IRK may make the connection unresolved until SMP identity
+         * distribution. In that case NimBLE cannot issue REPEAT_PAIRING at
+         * Pairing Request. It persists OUR_SEC first: replace the old bond
+         * here, before either new security direction is written. */
+        rc=ble_bonds_read(type,&key,&old);
+        if(!rc && old.sec.ltk_present && (old.sec.sc!=value->sec.sc ||
+           old.sec.ediv!=value->sec.ediv || old.sec.rand_num!=value->sec.rand_num ||
+           memcmp(old.sec.ltk,value->sec.ltk,16))) {
+            rc=ble_host_delete_bond(value->sec.peer_addr.type,value->sec.peer_addr.val);
+            if(rc) return rc;
+        } else if(rc && rc!=BLE_HS_ENOENT) return rc;
+    }
+#endif
+    return ble_bonds_write(type,value);
+}
+static int store_status(struct ble_store_status_event *event,void *arg)
+{
+    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)]; int count,rc,i;
+    (void)arg;
+    if(event->event_code==BLE_STORE_EVENT_FULL) return 0;
+    if(event->event_code!=BLE_STORE_EVENT_OVERFLOW) return BLE_HS_EUNKNOWN;
+    if(event->overflow.obj_type!=BLE_STORE_OBJ_TYPE_OUR_SEC &&
+       event->overflow.obj_type!=BLE_STORE_OBJ_TYPE_PEER_SEC &&
+       event->overflow.obj_type!=BLE_STORE_OBJ_TYPE_CCCD) return BLE_HS_EUNKNOWN;
+    rc=ble_store_util_bonded_peers(peers,&count,MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+    if(rc) return rc;
+    for(i=0;i<count;i++) {
+        if(event->overflow.obj_type==BLE_STORE_OBJ_TYPE_CCCD &&
+           !ble_addr_cmp(peers+i,&event->overflow.value->cccd.peer_addr)) continue;
+        return ble_host_delete_bond(peers[i].type,peers[i].val);
+    }
+    return BLE_HS_ENOMEM;
 }
 #endif
 static void receive_main(uint8_t type,const uint8_t *packet,uint16_t n)
@@ -230,8 +299,8 @@ void ble_host_start(void)
     ble_hs_cfg.sm_io_cap=BLE_SM_IO_CAP_NO_IO; ble_hs_cfg.sm_bonding=1; ble_hs_cfg.sm_mitm=0; ble_hs_cfg.sm_sc=1;
     ble_hs_cfg.sm_our_key_dist=BLE_SM_PAIR_KEY_DIST_ENC|BLE_SM_PAIR_KEY_DIST_ID;
     ble_hs_cfg.sm_their_key_dist=BLE_SM_PAIR_KEY_DIST_ENC|BLE_SM_PAIR_KEY_DIST_ID;
-    ble_hs_cfg.store_read_cb=ble_bonds_read; ble_hs_cfg.store_write_cb=ble_bonds_write;
-    ble_hs_cfg.store_delete_cb=ble_bonds_delete; ble_hs_cfg.store_status_cb=ble_store_util_status_rr;
+    ble_hs_cfg.store_read_cb=ble_bonds_read; ble_hs_cfg.store_write_cb=store_write;
+    ble_hs_cfg.store_delete_cb=ble_bonds_delete; ble_hs_cfg.store_status_cb=store_status;
 #endif
     ble_svc_gap_init(); ble_svc_gatt_init();
     rc=ble_gatts_count_cfg(services); if(!rc) rc=ble_gatts_add_svcs(services);

@@ -44,7 +44,7 @@ void fm1_ble_worker_irq(void)
     if(!ble_llx_testing) {
         bb_mark_event(BLE_STAGE_WORKER);
         uint32_t item=ble_time_item_begin();
-        fm1_ble_service(); ble_time_item_end(item);
+        fm1_ble_service(); ble_time_item_end(item,BLE_WORK_SERVICE,0);
         if(ble_time_budget()) ble_ll_worker(); else ble_port_pend();
         if(ble_time_budget()) ble_worker(); else ble_port_pend();
     }

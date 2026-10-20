@@ -39,7 +39,8 @@ static void hci_receive(uint8_t type,const uint8_t *p,uint16_t n)
 static uint8_t hci(uint16_t op,const uint8_t *p,unsigned n)
 {
     uint8_t command[35]; ble_put16(command,op); command[2]=(uint8_t)n; if(n) memcpy(command+3,p,n);
-    assert(!ble_hci_send(1,command,(uint16_t)(n+3u))); ble_worker();
+    hci_n=0; assert(!ble_hci_send(1,command,(uint16_t)(n+3u)));
+    for(unsigned i=0;i<32 && !hci_n;i++) { ble_ll_worker(); ble_worker(); }
     assert(hci_event[0]==14 && ble_get16(hci_event+3)==op); return hci_event[5];
 }
 static void hci_crypto(void)
@@ -126,7 +127,8 @@ static void bonds(void)
 }
 static void rx(const uint8_t *p,uint8_t n,uint8_t llid)
 {
-    assert(ble_ll_rx(1,(uint16_t)((n<<8)|llid),p,sim_ticks,0)); ble_ll_worker();
+    assert(ble_ll_rx(1,(uint16_t)((n<<8)|llid),p,sim_ticks,0));
+    for(unsigned i=0;i<16;i++) { ble_entropy_step(); ble_ll_worker(); }
 }
 static int slot_opcode(uint8_t op)
 {
@@ -172,6 +174,7 @@ static void security_tests(void)
     assert(d.phase==BLE_ENC_PC && !d.tx_on && !d.rx_on && !d.rx_counter && !d.tx_counter);
     complete_start(); ble_security_get_diag(&d); assert(d.encrypted && d.starts==1 && d.refreshes==1);
     { uint8_t type,event[32]; uint16_t n; unsigned changed=0,refreshed=0;
+      while(ble_link.created_pending) (void)ble_ll_poll(&type,event,&n);
       while(ble_ll_poll(&type,event,&n)) {
           if(event[0]==8) { assert(type==4 && n==6 && !event[2] && event[5]==1); changed++; }
           if(event[0]==0x30) { assert(type==4 && n==5 && !event[2]); refreshed++; }

@@ -79,6 +79,15 @@ static void con_ble_status(void)
         con_kv("executor_own_max_us",(int32_t)(timing.own_max/24u));
         con_kv("executor_item_max_us",(int32_t)(timing.item_max/24u));
         con_kv("executor_item_over_100us",(int32_t)timing.item_over_100us);
+        con_puts("executor_item_max_kind "); con_puts(ble_time_kind_name(timing.item_kind)); con_puts("\r\n");
+        con_kx("executor_item_max_opcode",timing.item_opcode);
+        for(i=0;i<BLE_WORK_COUNT;i++) {
+            con_puts("executor_kind "); con_puts(ble_time_kind_name(i));
+            con_puts(" max_ticks "); con_dec((int32_t)timing.kind_max[i]);
+            con_puts(" count "); con_dec((int32_t)timing.kind_count[i]);
+            con_puts(" over100 "); con_dec((int32_t)timing.kind_over_100us[i]);
+            con_puts(" opcode "); con_hex(timing.kind_opcode[i],4); con_puts("\r\n");
+        }
         con_kv("executor_own_over_250us",(int32_t)timing.own_over_250us);
         con_kv("executor_over_250us_plus_item",(int32_t)timing.pass_over_budget);
         con_kv("refill_max_us",(int32_t)(timing.refill_max/24u));

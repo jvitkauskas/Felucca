@@ -105,7 +105,9 @@ uint16_t ble_adv_header(uint8_t type, uint8_t own_type);
 uint8_t ble_adv_payload(uint8_t *out, const uint8_t *addr, const uint8_t *data, uint8_t n);
 
 /* Platform callbacks: controller/main contexts, never host callbacks from ISR.
- * stop_poll: 0 pending, 1 stopped, -1 quarantined. */
+ * stop_poll: 0 pending, 1 stopped, -1 quarantined.
+ * start: 0 published, positive pending (call again), negative failed. While
+ * pending the DMA instance remains closed; no subsequent command executes. */
 uint32_t ble_port_ticks(void);
 uint32_t ble_port_ms(void);
 int ble_port_start(const ble_adv_t *adv);

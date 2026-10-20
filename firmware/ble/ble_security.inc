@@ -5,9 +5,9 @@
 static struct {
     ble_security_diag_t d;
     uint8_t skd[16],iv[8],key[16],ltk[16],request[10];
-    uint8_t waiting,ltk_event,reply_pending,rejecting,ever_encrypted,encryption_event;
+    uint8_t waiting,ltk_event,reply_pending,rejecting,ever_encrypted,encryption_event,random_pending;
 } security __attribute__((section(".pool.ble")));
-static void security_init(void) { ble_secure_zero(&security,sizeof security); }
+static void security_init(void) { ble_entropy_cancel(BLE_RANDOM_LINK); ble_secure_zero(&security,sizeof security); }
 static void security_new(void)
 {
     ble_security_diag_t saved=security.d;
@@ -111,10 +111,7 @@ static int security_control(const uint8_t *p,uint8_t n)
         if(security.d.phase!=BLE_ENC_N && security.d.phase!=BLE_ENC_PC) return security_auth_failure(0),1;
         security.d.phase=BLE_ENC_S1; security.rejecting=0;
         memcpy(security.request,p+1,10); memcpy(security.skd,p+11,8); memcpy(security.iv,p+19,4);
-        if(!ble_entropy(security.skd+8,8) || !ble_entropy(security.iv+4,4)) { security_reject(0x1f); return 1; }
-        reply[0]=4; memcpy(reply+1,security.skd+8,8); memcpy(reply+9,security.iv+4,4);
-        if(tx_queue(reply,13,3,0)<0) { ble_ll_close(0x1f); return 1; }
-        security.waiting=security.ltk_event=1; security.d.ltk_requests++; return 1;
+        security.random_pending=1; ble_port_pend(); return 1;
     }
     if(p[0]==6 && n==1 && security.d.phase==BLE_ENC_S2) {
         key=ble_port_lock();
@@ -152,7 +149,18 @@ uint8_t ble_ll_ltk_reply(uint16_t handle,const uint8_t *ltk,int negative)
 static void security_worker(void)
 {
     uint8_t key_le[16],p=5; unsigned i;
-    ble_entropy_poll();
+    if(!live() || ble_link.peer_stop) return;
+    if(security.random_pending && live()) {
+        uint8_t random[12],reply[13]={4};
+        int rc=ble_entropy_request(BLE_RANDOM_LINK,random,sizeof random);
+        if(!rc) { ble_port_pend(); return; }
+        security.random_pending=0;
+        if(rc<0) { security_reject(0x1f); return; }
+        memcpy(security.skd+8,random,8); memcpy(security.iv+4,random+8,4); memcpy(reply+1,random,12);
+        ble_secure_zero(random,sizeof random);
+        if(tx_queue(reply,sizeof reply,3,0)<0) { ble_ll_close(0x1f); return; }
+        security.waiting=security.ltk_event=1; security.d.ltk_requests++; return;
+    }
     if(!security.reply_pending || !live()) return;
     if(security.reply_pending==2) { security.reply_pending=0; security_reject(6); return; }
     security.reply_pending=0;

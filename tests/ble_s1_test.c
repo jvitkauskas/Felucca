@@ -16,7 +16,7 @@ void ble_port_instant(uint8_t k,uint16_t i,const ble_conn_t *c) { (void)k; (void
 void ble_port_apply(uint8_t k,const ble_conn_t *c,uint16_t w,uint32_t win) { (void)k; (void)c; (void)w; (void)win; }
 
 static uint32_t tick,starts,updates,stops,responses;
-static int failure,stop_result=1;
+static int failure,stop_result=1,start_steps,start_failure;
 static ble_adv_t air;
 static uint8_t event[80];
 static uint16_t event_n;
@@ -26,7 +26,12 @@ uint32_t ble_port_ticks(void) { return tick; }
 uint32_t ble_port_ms(void) { return tick/24000; }
 void ble_port_pend(void) { }
 int ble_port_failed(void) { return failure; }
-int ble_port_start(const ble_adv_t *a) { air=*a; starts++; return failure; }
+int ble_port_start(const ble_adv_t *a)
+{
+    if(start_failure) return -1;
+    if(start_steps) { start_steps--; return 1; }
+    air=*a; starts++; return failure ? -1 : 0;
+}
 void ble_port_update(const ble_adv_t *a) { air=*a; updates++; }
 void ble_port_stop_begin(void) { stops++; }
 int ble_port_stop_poll(void) { return stop_result; }
@@ -158,6 +163,19 @@ static void controller_tests(void)
     assert(!ble_hci_send(1,raw,4)); ble_worker(); assert(responses==before && stops==1);
     ble_worker(); assert(responses==before); stop_result=1; ble_worker(); assert(responses==before+1 && !event[5]);
     p[0]=0; assert(!send(0x200a,p,1));
+    /* Resumable advertising preparation defers completion and preserves
+     * command FIFO, including a Reset arriving before publication. */
+    before=responses; start_steps=3;
+    assert(!ble_hci_send(1,(uint8_t[]){10,32,1,1},4)); ble_worker();
+    assert(responses==before); ble_get_diag(&d); assert(!d.enabled);
+    assert(!ble_hci_send(1,(uint8_t[]){3,12,0},3));
+    ble_worker(); ble_worker(); assert(responses==before);
+    ble_worker(); assert(responses==before+1 && !event[5] && ble_get16(event+3)==0x200a);
+    ble_worker(); assert(responses==before+1); /* Reset begins its deferred stop. */
+    ble_worker(); assert(responses==before+2 && !event[5] && ble_get16(event+3)==0x0c03);
+    before=responses; start_steps=1;
+    assert(!ble_hci_send(1,(uint8_t[]){10,32,1,1},4)); ble_worker(); start_failure=1; ble_worker();
+    assert(responses==before+1 && event[5]==3); start_failure=0;
     /* Malformed envelopes are rejected at intake, never a completion. */
     before=responses;
     for (i=0;i<3;i++) assert(ble_hci_send(1,raw,(uint16_t)i));

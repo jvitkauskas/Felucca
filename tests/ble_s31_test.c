@@ -15,12 +15,12 @@ static const uint8_t pub[6]={0x58,0x65,0x67,0x8b,0x40,0x62};
 static const uint8_t irk[16]={0x9b,0x7d,0x39,0x0a,0xa6,0x10,0x10,0x34,5,0xad,0xc8,0x57,0xa3,0x34,2,0xec};
 static const uint8_t rpa[6]={0xaa,0xfb,0x0d,0x94,0x81,0x70};
 static uint8_t reply[80],connection[40];
-static unsigned reply_count,connection_n;
+static unsigned reply_count,connection_n,connection_events;
 static void receive(uint8_t type,const uint8_t *p,uint16_t n)
 {
     assert(type==4 && n<=80);
     if(p[0]==14) { memcpy(reply,p,n); reply_count++; }
-    if(p[0]==0x3e && (p[2]==1 || p[2]==10)) { memcpy(connection,p,n); connection_n=n; }
+    if(p[0]==0x3e && (p[2]==1 || p[2]==10)) { memcpy(connection,p,n); connection_n=n; connection_events++; }
 }
 static uint8_t hci(uint16_t op,const void *p,unsigned n)
 {
@@ -54,9 +54,11 @@ static ble_conn_t from_rpa(void)
 }
 static void connect_report(ble_conn_t *c)
 {
-    unsigned i; connection_n=0; assert(ble_ll_create(c,sim_ticks));
+    unsigned i; connection_n=connection_events=0; assert(ble_ll_create(c,sim_ticks));
     for(i=0;i<8 && !connection_n;i++) ble_worker();
     assert(connection_n);
+    for(i=0;i<8;i++) ble_worker();
+    assert(connection_events==1); /* Never both legacy and Enhanced. */
 }
 static void end_link(void)
 {
@@ -91,16 +93,20 @@ static void privacy(void)
     assert(!hci(0x2029,0,0)); add(b,1); assert(!hci(0x2027,b,39));
     assert(!hci(0x204e,mode,8)); assert(!hci(0x202d,&enable,1));
     c=from_rpa(); connect_report(&c);
-    assert(connection_n==21 && connection[2]==1 && connection[7]==0 && connection[8]==1);
+    assert(connection_n==21 && connection[2]==1 && connection[7]==1 && !memcmp(connection+8,rpa,6));
     assert(!memcmp(ble_link.conn.peer,rpa,6)); end_link();
     masks(1); connect_report(&c);
     assert(connection_n==33 && connection[2]==10 && connection[7]==2 && connection[8]==1);
     assert(!memcmp(connection+20,rpa,6)); for(i=14;i<20;i++) assert(!connection[i]);
-    assert(ble_get16(connection+26)==24 && ble_get16(connection+30)==500); end_link(); masks(0);
+    assert(ble_get16(connection+26)==24 && ble_get16(connection+30)==500); end_link();
     assert(!hci(0x202d,&off,1)); connect_report(&c);
-    assert(connection[7]==1 && !memcmp(connection+8,rpa,6)); end_link();
+    assert(connection_n==33 && connection[2]==10 && connection[7]==1 && !memcmp(connection+8,rpa,6));
+    for(i=14;i<26;i++) assert(!connection[i]);
+    end_link();
     assert(!hci(0x202d,&enable,1)); c.peer[0]^=1; connect_report(&c);
-    assert(connection[7]==1 && !memcmp(connection+8,c.peer,6)); end_link(); c=sim_connection();
+    assert(connection_n==33 && connection[7]==1 && !memcmp(connection+8,c.peer,6));
+    for(i=14;i<26;i++) assert(!connection[i]);
+    end_link(); c=sim_connection();
     connect_report(&c); assert(connection[7]==0 && connection[8]==1); end_link();
     mode[7]=0; assert(!hci(0x204e,mode,8)); assert(!ble_ll_create(&c,sim_ticks));
     assert(ble_link.state==BLE_LINK_IDLE); ble_privacy_get_diag(&d); assert(d.network_rejected==1);
@@ -108,6 +114,14 @@ static void privacy(void)
     assert(!hci(0x202d,&enable,1)); c=from_rpa(); sim_aes_fault=1; connect_report(&c);
     assert(connection[7]==1); sim_aes_fault=0; end_link();
     ble_privacy_get_diag(&d); assert(d.matches==2 && d.aes_failures==1 && d.unresolved==2);
+    /* Enhanced alone (legacy bit 0 clear); the outer LE Meta mask gates
+     * both forms and never causes a fallback legacy event. */
+    { uint8_t le[8]={0,2},outer[8]={0};
+      c=from_rpa(); assert(!hci(0x2001,le,8)); connect_report(&c);
+      assert(connection_n==33 && connection[2]==10 && connection[7]==2); end_link();
+      assert(!hci(0x0c01,outer,8)); connection_n=0; assert(ble_ll_create(&c,sim_ticks));
+      for(i=0;i<8;i++) ble_worker();
+      assert(!connection_n && !ble_link.created_pending); end_link(); masks(0); }
     assert(!hci(0x200a,&enable,1));
     b[0]=2; assert(hci(0x2027,b,39)==0x12); /* parameter error before state */
     add(b,2); assert(hci(0x2027,b,39)==0x0c && hci(0x2028,b,7)==0x0c);
@@ -128,6 +142,8 @@ static void privacy(void)
     add(b,1); b[0]=1; b[6]=0xc1; assert(!hci(0x2027,b,39));
     mode[0]=1; mode[6]=0xc1; mode[7]=1; assert(!hci(0x204e,mode,8));
     masks(1); c=from_rpa(); connect_report(&c); assert(connection[7]==3 && connection[13]==0xc1); end_link();
+    masks(0); connect_report(&c);
+    assert(connection_n==21 && connection[7]==1 && !memcmp(connection+8,rpa,6)); end_link(); masks(1);
     memset(b,0,sizeof b); assert(!hci(0x2027,b,39)); b[1]=2; assert(!hci(0x2027,b,39));
     assert(hci(0x202b,0,0)==1 && hci(0x202c,0,0)==1 && hci(0x202e,0,0)==1);
     assert(!hci(0x2029,0,0));
@@ -135,16 +151,17 @@ static void privacy(void)
     add(b,1); assert(!hci(0x2027,b,39)); mode[0]=0; mode[6]=0; mode[7]=1;
     assert(!hci(0x204e,mode,8)); c=from_rpa(); connection_n=0; assert(ble_ll_create(&c,sim_ticks));
     for(i=0;i<3;i++) { ble_worker(); assert(!connection_n && ble_link.created_pending); }
-    ble_worker(); assert(connection_n==33 && connection[7]==2 && connection[8]==1); end_link();
+    ble_worker(); assert(!connection_n); ble_worker(); assert(connection_n==33 && connection[7]==2 && connection[8]==1); end_link();
     /* Interrupt acceptance just before the poll acquires its first lock. */
     assert(!hci(0x2029,0,0)); add(b,1); b[1]=9; assert(!hci(0x2027,b,39));
     {
         uint8_t event[40],type; uint16_t n;
         sim_lock_hook=accept_before_lock;
-        assert(ble_ll_poll(&type,event,&n) && type==4 && event[7]==0 && event[8]==9);
+        assert(!ble_ll_poll(&type,event,&n));
+        assert(ble_ll_poll(&type,event,&n) && type==4 && event[7]==1 && !memcmp(event+8,rpa,6));
         end_link();
     }
-    puts("H-22..H-25 / K-11 / F-24 connection path: PASS (legacy identity 00/01; Enhanced 02/03)");
+    puts("H-22..H-25 / K-11 / F-24 connection path: PASS (legacy OTA RPA 01; Enhanced identity 02/03 plus RPA)");
 }
 static void store(void)
 {
@@ -219,14 +236,22 @@ static void timing(void)
     start=sim_ticks; ble_time_pass_begin(start); item=ble_time_item_begin(); sim_ticks+=24u*20u;
     ble_time_preempt_enter(); sim_ticks+=24u*100u; ble_time_preempt_enter(); sim_ticks+=24u*200u;
     ble_time_preempt_leave(); sim_ticks+=24u*300u; ble_time_preempt_leave(); sim_ticks+=24u*30u;
-    ble_time_item_end(item); assert(ble_time_budget()); ble_time_pass_end(); ble_time_get_diag(&d);
+    ble_time_item_end(item,BLE_WORK_CONTROL,0); assert(ble_time_budget()); ble_time_pass_end(); ble_time_get_diag(&d);
     assert(d.wall_max==650u*24u && d.own_max==50u*24u && d.item_max==50u*24u);
     ble_time_pass_begin(sim_ticks);
-    for(unsigned i=0;i<3;i++) { item=ble_time_item_begin(); sim_ticks+=90u*24u; ble_time_item_end(item); }
+    for(unsigned i=0;i<3;i++) { item=ble_time_item_begin(); sim_ticks+=90u*24u; ble_time_item_end(item,BLE_WORK_CONTROL,0); }
     assert(!ble_time_budget()); ble_time_pass_end(); ble_time_get_diag(&d);
     assert(d.own_max==270u*24u && !d.pass_over_budget && d.own_over_250us==1 && !d.item_over_100us);
-    ble_time_pass_begin(sim_ticks); item=ble_time_item_begin(); sim_ticks+=101u*24u; ble_time_item_end(item); ble_time_pass_end();
+    ble_time_pass_begin(sim_ticks); item=ble_time_item_begin(); sim_ticks+=101u*24u; ble_time_item_end(item,BLE_WORK_CONTROL,0); ble_time_pass_end();
     ble_time_get_diag(&d); assert(d.item_over_100us==1 && d.item_max==101u*24u);
+    assert(d.item_kind==BLE_WORK_CONTROL && d.kind_max[BLE_WORK_CONTROL]==101u*24u &&
+        d.kind_over_100us[BLE_WORK_CONTROL]==1 && d.kind_count[BLE_WORK_CONTROL]==5);
+    ble_time_pass_begin(sim_ticks); item=ble_time_item_begin(); sim_ticks+=120u*24u;
+    ble_time_item_end(item,BLE_WORK_COMMAND,0x2017); ble_time_pass_end(); ble_time_get_diag(&d);
+    assert(d.item_kind==BLE_WORK_COMMAND && d.item_opcode==0x2017 &&
+        d.kind_opcode[BLE_WORK_COMMAND]==0x2017 && d.kind_max[BLE_WORK_CONTROL]==101u*24u &&
+        d.kind_over_100us[BLE_WORK_COMMAND]==1 && d.kind_count[BLE_WORK_COMMAND]==1);
+    assert(!strcmp(ble_time_kind_name(BLE_WORK_RESOLUTION),"resolution"));
     start=sim_ticks; before=ble_time_ccm_total(); sim_ticks+=63u*24u; ble_time_ccm_add(40u*24u); ble_time_refill_end(start,before);
     ble_time_get_diag(&d); assert(d.refill_max==63u*24u && d.refill_ccm_max==40u*24u && d.refill_other_max==23u*24u && !d.refill_over_80us);
     start=sim_ticks; before=ble_time_ccm_total(); sim_ticks+=81u*24u; ble_time_ccm_add(52u*24u); ble_time_refill_end(start,before);
@@ -235,4 +260,42 @@ static void timing(void)
       memcpy(changed,pub,6); changed[0]^=1; ble_host_local_irk(changed,b); assert(memcmp(a,b,16)); }
     puts("F-27 arithmetic: signed dispatch/wrap/error, nested preemption counted once, own budget/item, split refill, stable nonzero local IRK: PASS");
 }
-int main(void) { privacy(); store(); timing(); return 0; }
+static void resumable_random(void)
+{
+    uint8_t want[3][32],got[32],scratch[32]; unsigned i,j; ble_timing_diag_t d;
+    sim_reset(); sim_storage_reset(); sim_seed();
+    assert(ble_entropy(want[0],8)); ble_entropy_connection(); assert(ble_entropy(want[1],12));
+    assert(ble_entropy(want[2],32));
+    sim_reset(); sim_storage_reset(); sim_seed(); ble_time_reset();
+    /* Deliberately injected 60 us per compression is a cost MODEL, not a
+     * measured FM-1 time. Link-time wrappers count actual TinyCrypt blocks. */
+    sim_sha_cost_ticks=60u*24u;
+    for(i=0;i<3;i++) {
+        unsigned n=i==0 ? 8 : i==1 ? 12 : 32,steps=0;
+        if(i==1) ble_entropy_connection();
+        assert(!ble_entropy_request(BLE_RANDOM_HCI,got,n));
+        assert(!ble_entropy_request(BLE_RANDOM_LINK,scratch,12));
+        while(!ble_entropy_request(BLE_RANDOM_HCI,got,n)) {
+            uint32_t count=sim_sha_compressions; ble_time_pass_begin(sim_ticks);
+            ble_entropy_step(); ble_time_pass_end();
+            assert(sim_sha_compressions-count==1 && ++steps<8);
+        }
+        assert(steps==(i==1 ? 5u : 3u) && !memcmp(got,want[i],n));
+    }
+    ble_time_get_diag(&d);
+    assert(d.item_max==60u*24u && !d.item_over_100us && !d.pass_over_budget);
+    assert(d.kind_count[BLE_WORK_ENTROPY_RESEED]==2 && d.kind_count[BLE_WORK_ENTROPY_OUTPUT]==3 &&
+        d.kind_count[BLE_WORK_ENTROPY_REKEY]==6 && d.kind_opcode[BLE_WORK_ENTROPY_OUTPUT]==0x2018);
+    /* Cancel an abandoned link job after output generation; rekey completes,
+     * then HCI can acquire the generator without a reused output/counter. */
+    assert(!ble_entropy_request(BLE_RANDOM_LINK,got,12)); ble_entropy_step();
+    ble_ll_reset();
+    for(j=0;j<3;j++) ble_entropy_step();
+    assert(!ble_entropy_request(BLE_RANDOM_HCI,got,8));
+    for(j=0;j<3;j++) ble_entropy_step();
+    assert(ble_entropy_request(BLE_RANDOM_HCI,got,8)==1);
+    sim_sha_cost_ticks=0; ble_time_reset(); ble_time_get_diag(&d);
+    assert(!d.item_max && !d.item_over_100us && !d.kind_count[BLE_WORK_ENTROPY_OUTPUT]);
+    printf("F-27 resumable RNG: synchronous/async byte equality; normal 3, reseed 5 SHA blocks over separate items; model 60 us/block, per-kind max 60 us; owner exclusion/cancel/rekey: PASS\n");
+}
+int main(void) { privacy(); store(); timing(); resumable_random(); return 0; }

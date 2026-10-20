@@ -17,6 +17,12 @@ uint32_t ble_crc32(const uint8_t *p,unsigned n);
 int ble_seed_record_valid(const uint8_t record[64]);
 void ble_seed_boot(const uint8_t address[6],uint32_t reset,uint32_t r64lo,uint32_t r64hi);
 int ble_entropy(uint8_t *out,unsigned n);
+enum { BLE_RANDOM_HCI=1, BLE_RANDOM_LINK=2 };
+/* Executor-only request: -1 failure, 0 pending, 1 copied (max 32 bytes).
+ * One shared generator; a second owner waits without changing the first job. */
+int ble_entropy_request(unsigned owner,uint8_t *out,unsigned n);
+void ble_entropy_step(void);
+void ble_entropy_cancel(unsigned owner);
 void ble_entropy_absorb(uint8_t label,const void *data,unsigned n);
 void ble_entropy_connection(void);
 void ble_entropy_sample(uint32_t ticks,uint32_t rssi,int event);
