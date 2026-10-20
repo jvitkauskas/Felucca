@@ -1,0 +1,16 @@
+S3 bench r1, 2026-10-20, image 1543c620..., addr FD:60:52:C0:DF:6C (public), desktop BlueZ, no btmon (no sudo)
+PASS  boot 1: seed FIRST/STORED seq 1; boot 2: CHAINED/STORED seq 2; no malformed/conflict/flash failures; selftest 1
+PASS  pairing: SC Just Works (method 2), key size 16, ltk_negative 0, pair_failures 0
+PASS  10 min encrypted @15 ms: arps in 40 pkts, keys out 98, midi_drop 0, mic_failures 0, ACL 121/121/121, audio_late 0
+PASS  bond flush after disconnect (needs desktop 'block', BlueZ auto-reconnects trusted device), bond_failures 0
+PASS  FM-1 power cycle -> 4 records loaded -> desktop reconnect encrypted with stored LTK, no new pairing
+PASS  10 cycles + 3 manual reconnects encrypted, establishment_fail 0 (cycle 10 desktop-side race with BlueZ autoconnect)
+BONUS key refresh (pause/restart) exercised on hardware 8x: ltk_requests == enc_starts + enc_refreshes, no phase/MIC errors.
+      Cause: FM-1 security request ~after connect on already-encrypted link -> BlueZ refreshes. Recommend skip if encrypted.
+MINOR nimble_error 2 (BLE_HS_EALREADY) from ble_gap_security_initiate colliding with central-initiated pairing (ble_host.c:232)
+FAIL  refill_max_us 63, refill_over_60us 8+6 with encryption (S2.1: 17 us). Under IRQ exclusion -> real time.
+FAIL  executor pass max ~866 us, over_250us >13k (wall-clock incl. preemption by audio prio 3; spec/measurement gap, as S2.1)
+BUG   executor_dispatch_max_us 178956953 wraps (same as S2.1)
+INFO  worker_timer_max_gap_us 2818 during bond flash write (idle, reported separately per spec)
+INFO  bond_records 4->3: CCCD record deleted when script unsubscribes; normal NimBLE behaviour
+NOT RUN central conn-update 7.5/30 ms (sudo), range walk, Android (pending, desktop left BLOCKED in bluetoothctl)

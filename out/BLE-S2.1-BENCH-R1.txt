@@ -1,0 +1,12 @@
+S2.1 bench r1, 2026-10-20, image e555e67b..., FM-1 after owner's stock-015 test (new BT addr FD:60:52:C0:DF:6C, m-bootloader 1.2)
+PASS  boot: error 0, executor_selftest 1, IRQCFG 0x5, timer calls advance, PMU 01=60 74=00 75=07
+PASS  75 s link: MIDI both ways (FM-1 keys 36 out, desktop arps 24 in), ACL 59/59/59, MTU 200
+PASS  10/10 connect cycles, ACL 208/208/208, heap stable 384/396
+PASS  10 min @15 ms: no supervision fail, 5 arps in (+40 pkts), ACL 222/222/222, rx_backpressure 0, audio_late 0, voices_shed 0
+FAIL  executor pass budget: pass max 774 us, over_250us 4946 (about 3/s while advertising, also while connected).
+      Measured wall-clock from TIMER0 entry (prio 2) incl. preemption by audio (prio 3, audio_max 722 us) and radio.
+      Likely spec/measurement gap: budget should exclude preemption or record self time.
+BUG   executor_dispatch_max_us 178956964 (= 2^32/24): negative dispatch (request stamped after 'start' was read,
+      start read before irq_save in fm1_ble_worker_irq) wraps unsigned. Diagnostic only.
+NOTE  operator error: console "ble adv" detaches NimBLE (manual mode); first link attempt invalid; "ble host" resync -> nimble_resets 1 / nimble_error 12 expected.
+NOT RUN central parameter update (no sudo), supervision range walk (passed on S2), Android.

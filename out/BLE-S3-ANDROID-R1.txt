@@ -1,0 +1,61 @@
+BLE S3 Android bench, round 1 - 2026-10-20 evening
+Image: out/felucca-ble-s3.fwsc (sha256 1543c620...); already on flash (m-flasher: "Nothing to write").
+FM-1 identity FD:60:52:C0:DF:6C (public). Desktop central E8:BF:B8:9C:77:40 (public, BlueZ, SC bond).
+Phone: HONOR Magic V3 (FCP-N49), Android 16 / SDK 36, MagicOS 10.0.0.166(C431E1R3P2);
+       identity 44:90:46:83:9A:6F (public), connects from RPAs.
+Apps: philburk/android-midisuite built from source (MIDI BLE Connect 1.4.4, MIDI Scope,
+      MIDI Keyboard 1.7), driven over adb wireless. FM-1 'ble echo on' for the return path.
+
+RESULT: functional first-time pairing and MIDI PASS; bonded reconnect FAIL (blocks S3 on Android).
+
+PASS  first-time pairing (attempt 2): Android pairing consent, then encrypted + bonded, key 16,
+      ltk_negative 0, MTU 200, CCCD subscribed. Android shows two consent prompts for one pairing
+      (two BOND_STATE_BONDING transitions 19:07:21.65 / 19:07:22.96); the user accepted one.
+PASS  MIDI both ways over the encrypted link: 8 keys from MIDI Keyboard -> midi_packets_in 16,
+      echoed midi_packets_out 16; MIDI Scope shows all 16 (NoteOn/NoteOff 48..60). midi_bad 0,
+      midi_drop 0, mic_failures 0. ACL 75 tx / 75 acked / 69 rx.
+PASS  bond flush after disconnect: bond_pending 0, 8 records, bond_writes 4, failures 0.
+PASS  FM-1 reboot: seed CHAINED seq 4 -> 5; 8 bond records reloaded, bond_malformed 0.
+
+FAIL  bonded reconnect after FM-1 reboot. The phone (RPA 53:BD:B2:F4:A4:3C) sends LL_ENC_REQ with
+      EDIV 0x6011 / Rand 0x37364E637A75E8D9. These exactly match the stored our-sec record for
+      identity 44:90:46:83:9A:6F, but NimBLE looks up by the unresolved RPA -> ENOENT -> negative LTK
+      reply (ltk_negative 1); the phone disconnects 0x13. No re-pair prompt.
+      Root cause: no RPA resolution anywhere. NimBLE 1.9 (upstream) has no host-based privacy and
+      relies on the controller resolving list. At boot ble_hs_misc_restore_irks sends HCI LE Add
+      Device To Resolving List (0x2027, peer 44:90:46:83:9A:6F) and the Felucca controller answers
+      0x01 Unknown HCI Command. The desktop passed only because BlueZ uses its public address.
+      -> SPEC GAP: S3 must resolve peer RPAs, either with LL privacy in the controller
+         (resolving list 0x2027/0x2028/0x2029/0x202D/0x204E + LE Enhanced Connection Complete
+         carrying the peer identity) or with a host/platform shim that resolves RPAs against stored
+         IRKs before NimBLE sees the connection. A bench item for any RPA central (Android, iOS,
+         macOS, Windows) must be part of S3 acceptance.
+
+FINDING  The phone bond is LEGACY Just Works, not SC (flash dump 0x96000: phone records sc=0, our-sec
+      EDIV/Rand non-zero; desktop records sc=1). Why Android 16 ended up with legacy is unknown.
+      It followed a failed first attempt (below). Needs a sniffer or a fresh pair from a clean bond.
+BUG   nimble_pair_method_legacy1_SC2 reported 2 for the phone link. ble_host.c:105 looks up the
+      record by desc.peer_id_addr (the unresolved RPA), misses, and ble_host.c:279 falls back to
+      the bond store's last method. The readout must come from the record actually used.
+FINDING  First pairing attempt stalled: Android accepted at 19:06:23.56 (SMP PAIR_REQ_RSP), went to
+      SMP_STATE_WAIT_NONCE at 19:06:23.62, then SMP_RSP_TIMEOUT at 19:06:53.62. FM-1:
+      pair_failures +1, pair_last_status 13 (BLE_HS_ETIMEOUT). The consent had been pending ~20 s
+      (security request at ~19:06:03). The FM-1 trace was lost in the reboot; cause unknown.
+      Reproduce with trace frozen right after the timeout.
+FINDING  Disconnect mismatch: the phone log says DISCONNECTED reason 22 (0x16, local host) at
+      19:13:01; the FM-1 recorded supervision_fail 1, reason 0x08, 4 s after the apps closed; the
+      trace shows no LL_TERMINATE_IND reaching the host. Either the FM-1 missed the TERMINATE_IND
+      or Android gave up on it. Sniffer needed (nRF52840).
+INFO  Desktop interference: 'bluetoothctl block' does not stop the kernel's LE auto-connect. The
+      desktop connected 1.4 s after FM-1 boot and sent nothing; NimBLE's SMP timer ended it after
+      30 s (HCI_Disconnect 0x13), counting pair_failures +1. Unblocked again at the end of this round.
+INFO  Bond sector: 25 of 32 slots used, 17 of them superseded CCCD records from the desktop
+      (CCCD churn). Compaction has not run yet (bond_erases 0); the next sessions will exercise it.
+      Orphan CCCD record keyed by the phone RPA 5C:D7:B6:85:60:2E (written before identity was
+      known) persists forever.
+INFO  Timing with Android: executor_pass_max_us 817, refill_max_us 62 (over_60us 1),
+      worker_timer_max_gap 2790 us (bond flash write). Android did 8 conn updates and 6 channel-map
+      updates, late_instants 0; control_ignored 2 (unidentified).
+
+NOT RUN  10 Android connect cycles, 10-minute Android link (moot until RPA resolution exists).
+Flash dump: desktop ~/backups/fm1-20261020-191945.bin (read-only backup in download mode).

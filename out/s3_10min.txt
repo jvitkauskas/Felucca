@@ -1,0 +1,81 @@
+connected on try 1 at 12:05:40
+arp 1 sent 12:05:45
+arp 2 sent 12:07:46
+arp 3 sent 12:09:46
+arp 4 sent 12:11:47
+arp 5 sent 12:13:47
+notifications received: 99
+Connected=False
+conn_interval_1250us 12
+conn_latency 0
+conn_timeout_10ms 400
+connections 1
+conn_events 23800
+rx_A_new 31818
+rx_B_crc_5_13 83
+rx_C_repeat_9 129
+retransmission_rx 129
+rx_backpressure 0
+rx_peak 2
+supervision_fail 0
+disconnects 0
+last_disconnect_reason 0x00000000
+conn_updates 1
+acl_tx_accepted 121
+acl_acked 121
+ncp_credits 121
+worker_max_gap_us 1851
+worker_max_us 834
+nimble_resets 0
+nimble_error 2
+midi_packets_in 40
+midi_packets_out 98
+midi_drop 0
+error 0
+rx_max_ticks 2580
+event_max_ticks 1246
+rx_over_380us 0
+event_work_over_150us 0
+ble_critical_max_ticks 6036
+ble_critical_over_390us 0
+stop_timeouts 0
+dma_canary_errors 0
+audio_max_us 743
+audio_late 0
+voices_shed 0
+enc_phase_N_S1_S2_PA_PB_PC 0
+enc_rx_on 1
+enc_tx_on 1
+enc_enabled 1
+enc_starts 2
+enc_refreshes 0
+mic_failures 0
+enc_phase_errors 0
+ltk_requests 2
+ltk_negative 0
+enc_tx_counter_hi 0
+enc_tx_counter_lo 0x0000000C
+enc_rx_counter_hi 0
+enc_rx_counter_lo 0x0000000E
+bond_records 4
+bond_pending 1
+bond_writes 4
+bond_erases 0
+bond_failures 0
+bond_malformed 0
+bond_pair_method_legacy1_SC2 2
+executor_selftest 1
+executor_dispatch_max_us 178956953
+executor_pass_max_us 841
+executor_over_250us 13624
+refill_max_us 63
+refill_over_60us 8
+nimble_resets 0
+nimble_error 2
+nimble_encrypted 1
+nimble_key_size 16
+midi_echo 0
+midi_packets_in 40
+midi_packets_out 98
+midi_bad 0
+midi_drop 0
