@@ -13,8 +13,9 @@ Boot (from S3 data): seed CHAINED seq 6; 7 bond records loaded; bond_private_dro
 BUG (spec r5 fallback, 03 3.6 item 2): the phone had forgotten the bond; the FM-1 still had it.
   The phone's new RPA resolved to the old identity (rl_matches 1); the legacy LE Connection Complete then
   carried the identity (type 0x00) and no RPA, so NimBLE took the identity as the peer's over-the-air
-  address. The phone started a fresh pairing; the phone reported SMP Confirm Value Failed
-  (pair_last_status 1028 = peer error 0x04). Pairing functions (legacy c1; SC f5/f6) hash the
+  address. The phone started a fresh pairing; the FM-1's host found the phone's confirm value
+  wrong and sent Pairing Failed 0x04 Confirm Value Failed (pair_last_status 1028 = 0x404 = local SM error 0x04;
+  corrected 2026-10-20 from the phone's HCI snoop log, which shows the FM-1 sending it). Pairing functions (legacy c1; SC f5/f6) hash the
   over-the-air addresses, so the host needs the RPA as well. NimBLE deleted the stale bond (records 7->4)
   but the resolving-list entry stayed (rl_entries 2) until `ble host` (resync/HCI Reset) rebuilt the list.
   -> the host must get the peer RPA: LE Enhanced Connection Complete (unmasked by the host) is the

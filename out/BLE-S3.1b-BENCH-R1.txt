@@ -1,0 +1,46 @@
+BLE S3.1 round 2 (spec r6) bench - 2026-10-20 late evening
+Image: out/felucca-ble-s3.1b.fwsc sha256 414a2a86e6afeae68021b43c21bbbb9acfed4cef448ee92868ff80e06afdc4e5
+(flashed over S3.1, CRC verified; backup ~/backups/fm1-20261020-204941.bin). Same unit, phone and desktop.
+
+RESULT: F-28 PASS, F-24 recheck PASS, 10-minute encrypted desktop link PASS; B23 and B24 answered
+from the phone's own HCI snoop log; W_item at most 108 us (limit 100 us, two item kinds slightly over).
+
+Boot: seed CHAINED seq 8; 8 bond records; rl_entries 2; executor_selftest 1; error 0.
+HCI trace at host sync (verified): 202D 00, 2029, 202D 01, 2027 local entry (zero peer), 204E device,
+  2027 phone identity 44:90:46:83:9A:6F, 204E device, then LE Set Event Mask 1F 02 00.. (0x21F).
+
+PASS  F-24 recheck after the flash: phone reconnect from a new RPA -> LE Enhanced Connection Complete
+      (0x3E/0x0A, type 0x02, identity 44:90:46:83:9A:6F, local RPA 0, peer RPA 70:42:65:04:79:B9),
+      LTK reply, encrypted, no prompt.
+PASS  F-28 phone-only forget then re-pair: RPA resolved to the stale entry, Enhanced event with identity
+      and RPA, legacy pairing completed (pair_failures 0), then 2028 (old entry) ... 2027 + 204E (new
+      entry) without a disconnect; encrypted, bonded, subscribed; rl_entries stays 2.
+PASS  10-minute encrypted link from BlueZ (SC bond, 15 ms): 5 arpeggios -> midi_packets_in 40, midi_bad 0,
+      midi_drop 0, mic_failures 0, ltk_negative 0, ACL 71 tx / 71 acked / 107 rx, clean end 0x13;
+      audio_max 746 us, audio_late 0, voices_shed 0, dma_canary_errors 0.
+
+Timing after the session (phone F-24/F-28 + 10-minute desktop link; about 1.26 M executor items):
+  dispatch max 688 us, negatives 0                                   PASS
+  executor wall max 953 us; own max 201 us; own_over_250 0; over_250_plus_item 0   PASS
+  W_item max 107-108 us: kind 'command' 0C03 HCI Reset 2589 ticks (108 us, 1 item) and kind 'control'
+    2525 ticks (105 us, 9 of 124 control items, LL control procedures: encryption start is the likely one)
+    -> FAIL by 5-8 us against W_item <= 100 us; all other kinds well below (rx 53 us, housekeep 61 us,
+       entropy_sample 58 us, adv_prepare 37 us, resolution 21 us, delivery 28 us)
+  refill max 69 us = CCM 30 + other 38; over_80 0                     PASS
+  worker_timer_max_gap 3438 us (bond flash write, no link)            INFO
+
+B23 ANSWERED (phone HCI snoop /data/log/bt, readable over adb on this Honor; 4 pairings 19:06-20:54):
+  phone Pairing Request: IO 0x04 KeyboardDisplay, AuthReq 0x05 (bond, MITM, SC=0), keys 0x07/0x07.
+  FM-1 Security Request AuthReq 0x09 (SC=1); Pairing Response IO 0x03, AuthReq 0x09 (SC=1), keys 0x03/0x03.
+  -> the phone declines SC; the FM-1 offers it. Not an FM-1 fault.
+B24 ANSWERED (same log): stalled attempt = phone sent Pairing Request 20 s after the Security Request,
+  FM-1 answered 54 ms later, the phone never sent its Pairing Confirm (legacy: initiator first). In the
+  good attempt the phone's Confirm came 2.2 s after the Response, when its second consent dialog was
+  accepted. The second dialog gates the phone's Confirm. Not an FM-1 fault.
+  The log also shows the S3.1 round-1 F-28 failure: the FM-1 sent Pairing Failed 0x04 (Confirm Value Failed)
+  at 20:07:47 (NimBLE status 0x404 = local SM error). The S3.1 bench record said the phone reported it;
+  corrected there.
+A9 not re-checked in this round (phone sessions ended by Bluetooth disable / app kill).
+
+NOT RUN: 7.5 ms run (needs a central that updates parameters; no sudo on the desktop), F-25 40-session
+churn, F-26 consent delays (B24 explains the mechanism), H-22..H-25 on air, sniffer items.
