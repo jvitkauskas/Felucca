@@ -24,6 +24,7 @@ static uint8_t flash[0x100000];
 static const uint8_t pub[6]={0x58,0x65,0x67,0x8b,0x40,0x62};
 uint32_t ble_port_ticks(void) { return tick; }
 uint32_t ble_port_ms(void) { return tick/24000; }
+void ble_port_pend(void) { }
 int ble_port_failed(void) { return failure; }
 int ble_port_start(const ble_adv_t *a) { air=*a; starts++; return failure; }
 void ble_port_update(const ble_adv_t *a) { air=*a; updates++; }
@@ -134,7 +135,7 @@ static void controller_tests(void)
     assert(!send(0x1009,0,0) && !memcmp(event+6,pub,6));
     assert(!send(0x2002,0,0) && event_n==9 && event[6]==27 && event[8]==5);
     assert(!send(0x1002,0,0)); memcpy(map,event+6,64);
-    assert(map[5]==192 && map[14]==40 && map[15]==2 && map[25]==(FELUCCA_BLE_TX_DBM==127 ? 0xb7 : 0xf7) && map[26]==3 && map[0]==0x20 && map[27]==0xa0 && map[28]==0x0e);
+    assert(map[5]==192 && map[14]==40 && map[15]==2 && map[25]==(FELUCCA_BLE_TX_DBM==127 ? 0xb7 : 0xf7) && map[26]==3 && map[0]==0x20 && map[27]==0x20 && map[28]==0x08);
     for (i=29;i<64;i++) assert(map[i]==0);
 #if FELUCCA_BLE_TX_DBM == 127
     assert(send(0x2007,0,0)==1);
@@ -168,13 +169,13 @@ static void controller_tests(void)
     /* Command flood: four copied, ninety-six immediate, exactly 100 replies. */
     raw[0]=0xff; raw[1]=0xff; raw[2]=0; before=responses;
     for (i=0;i<100;i++) assert(!ble_hci_send(1,raw,3));
-    assert(responses==before+96);
-    for (i=0;i<4;i++) ble_worker();
+    assert(responses==before);
+    for (i=0;i<100;i++) ble_worker();
     assert(responses==before+100);
     ble_get_diag(&d); assert(d.overflow==96);
     /* Reset cancels queued work and still answers the accepted command. */
     raw[0]=3; raw[1]=12; assert(!ble_hci_send(1,raw,3)); raw[0]=1; raw[1]=16;
-    assert(!ble_hci_send(1,raw,3)); ble_worker(); assert(!event[5]); ble_worker(); assert(event[5]==0x0c);
+    assert(!ble_hci_send(1,raw,3)); ble_worker(); assert(!event[5]); ble_worker(); assert(!event[5]);
     assert(!send(0x2008,(uint8_t[32]){0},32));
     /* No public identity: public enable rejected, static random accepted. */
     ble_init((uint8_t[6]){0},host); p[0]=1; assert(send(0x200a,p,1)==0x12);

@@ -12,9 +12,13 @@ for root in roots:
 files += [src/'porting/nimble/src'/n for n in ['os_mbuf.c','os_mempool.c','os_msys.c','mem.c','endian.c']]
 files += [src/'nimble/transport/src/transport.c',src/'nimble/transport/src/monitor.c']
 files += [src/n for n in ['LICENSE','NOTICE'] if (src/n).is_file()]
+# S3 uses the pinned bundled TinyCrypt software ECC/AES-CMAC/SHA256 subset.
+files += list((src/'ext/tinycrypt/include/tinycrypt').glob('*.h'))
+files += [src/'ext/tinycrypt/src'/n for n in ('aes_encrypt.c','cmac_mode.c','ecc.c','ecc_dh.c','sha256.c','utils.c')]
+files += [src/'ext/tinycrypt'/n for n in ('LICENSE','AUTHORS')]
 manifest=[]
 for p in sorted(set(files)):
     out=dst/p.relative_to(src); out.parent.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(p,out); manifest.append(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p))
-Path('out/BLE-S2-NIMBLE-INPUT-SHA256SUMS').write_text('\n'.join(manifest)+'\n')
+Path('out/BLE-NIMBLE-IMPORT-SHA256SUMS').write_text('\n'.join(manifest)+'\n')
 (dst/'PINNED.md').write_text('Apache NimBLE 1.9.0, tag nimble_1_9_0_tag\nCommit da7e3256da3ba80b232df880f40d8359311cc62e\nOffline source subset; original Apache-2.0 notices retained.\nNo NimBLE controller is compiled. See firmware/ble/port for the Felucca NPL.\n')

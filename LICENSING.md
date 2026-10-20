@@ -110,3 +110,9 @@ Its original Apache-2.0 copyright notices, LICENSE and NOTICE are retained.
 Only its host, GAP/GATT services, transport memory pools and porting utilities
 are linked. The Felucca NPL, H4 glue, controller and MIDI application are
 GPL-3.0-only. See `docs/BLE-S2-AUDIT.md` and the import hash manifest.
+
+S3 also links the pinned NimBLE checkout's bundled TinyCrypt AES, CMAC, SHA-256
+and P-256 ECC sources under `firmware/third_party/nimble/ext/tinycrypt/`.
+The original BSD-3-Clause / Kenneth MacKay notices, LICENSE and AUTHORS are
+retained unchanged. The combined firmware remains GPL-3.0-only. See
+`out/BLE-S3-TINYCRYPT-INPUT-SHA256SUMS` and `docs/BLE-S3-AUDIT.md`.

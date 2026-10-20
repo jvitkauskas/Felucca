@@ -12,6 +12,8 @@ import asyncio
 import socket
 import struct
 import time
+import tempfile
+from pathlib import Path
 
 MIDI='7772e5db-3868-4112-a1a9-f2669d106bf3'
 SERVICE='03b80e5a-ede8-4b33-a751-6ce34ec4c700'
@@ -29,6 +31,27 @@ def update(args):
         radio.bind((args.index,))
         radio.send(bytes((1,0x13,0x20,len(body)))+body)
     print('Central HCI LE Connection Update sent; verify Command Status and LE Connection Update Complete in btmon.')
+
+async def connect_retry(call,device):
+    for attempt in range(3):
+        try:
+            await call(device,'org.bluez.Device1','Connect')
+            return
+        except RuntimeError as error:
+            if 'AlreadyConnected' in str(error): return
+            if attempt==2: raise
+            print(f'Connect attempt {attempt+1} failed: {error}; retrying',flush=True)
+            await asyncio.sleep(1)
+
+async def alsa_note(port,note):
+    # Standard MIDI file: quarter-note Note On/Off, 120 bpm. BlueZ's MIDI
+    # plugin owns WriteValue; the ALSA sequencer port is its supported input.
+    track=bytes((0,0x90,note,100,0x83,0x60,0x80,note,0,0,0xff,0x2f,0))
+    midi=b'MThd'+struct.pack('>IHHH',6,0,1,480)+b'MTrk'+struct.pack('>I',len(track))+track
+    with tempfile.TemporaryDirectory(prefix='felucca-midi-') as directory:
+        file=Path(directory)/'note.mid'; file.write_bytes(midi)
+        process=await asyncio.create_subprocess_exec('aplaymidi','-p',port,str(file))
+        if await process.wait(): raise RuntimeError('aplaymidi failed; check aplaymidi -l')
 
 async def run(args):
     from dbus_next.aio import MessageBus
@@ -68,7 +91,7 @@ async def run(args):
     await bus.call(Message(destination='org.freedesktop.DBus',path='/org/freedesktop/DBus',interface='org.freedesktop.DBus',member='AddMatch',signature='s',body=["type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'"]))
     for cycle in range(args.cycles):
         print(f'Connect cycle {cycle+1}/{args.cycles}',flush=True)
-        await call(device,'org.bluez.Device1','Connect')
+        await connect_retry(call,device)
         characteristic=None
         for _ in range(100):
             tree=await objects()
@@ -87,9 +110,8 @@ async def run(args):
         deadline=time.monotonic()+args.duration
         while time.monotonic()<deadline:
             if args.send_notes:
-                await call(characteristic,'org.bluez.GattCharacteristic1','WriteValue','aya{sv}',[packet(0x90,args.note,100),{'type':Variant('s','command')}])
-                await asyncio.sleep(0.15)
-                await call(characteristic,'org.bluez.GattCharacteristic1','WriteValue','aya{sv}',[packet(0x80,args.note,0),{'type':Variant('s','command')}])
+                if not args.alsa_port: raise RuntimeError('--send-notes requires --alsa-port CLIENT:PORT; find it with aplaymidi -l')
+                await alsa_note(args.alsa_port,args.note)
             await asyncio.sleep(0.85 if args.send_notes else 1)
         await call(device,'org.bluez.Device1','Disconnect')
         await asyncio.sleep(0.5)
@@ -104,6 +126,7 @@ def main():
     parser.add_argument('--cycles',type=int,default=1)
     parser.add_argument('--send-notes',action='store_true')
     parser.add_argument('--note',type=int,default=60)
+    parser.add_argument('--alsa-port',help='BlueZ MIDI ALSA sequencer CLIENT:PORT (aplaymidi -l)')
     parser.add_argument('--conn-update',nargs=5,metavar=('HANDLE','MIN','MAX','LATENCY','TIMEOUT'))
     args=parser.parse_args()
     if args.conn_update: update(args)

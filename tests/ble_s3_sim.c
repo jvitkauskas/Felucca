@@ -1,0 +1,49 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+#include <assert.h>
+#include <string.h>
+#include "tinycrypt/aes.h"
+#include "ble_s3_sim.h"
+#include "../firmware/ble/ble_seed.h"
+#include "../firmware/ble/ble_crypto.h"
+uint8_t sim_flash[12288];
+int sim_flash_fault,sim_flash_idle=1,sim_flash_mismatch,sim_aes_fault;
+unsigned sim_erases[3],sim_programs[3];
+static struct tc_aes_key_sched_struct aes;
+int ble_port_aes_begin(const uint8_t key[16]) { return !sim_aes_fault && tc_aes128_set_encrypt_key(&aes,key); }
+int ble_port_aes_block(const uint8_t in[16],uint8_t out[16]) { return !sim_aes_fault && tc_aes_encrypt(out,in,&aes); }
+void ble_port_aes_end(void) { }
+int ble_port_storage_idle(void) { return sim_flash_idle && ble_link.state==BLE_LINK_IDLE; }
+int ble_port_flash_read(uint32_t off,uint8_t *out,uint32_t n)
+{
+    assert(off>=0x94000u && n<=0x97000u-off); memcpy(out,sim_flash+off-0x94000u,n); return 0;
+}
+int ble_port_flash_erase(uint32_t off,uint32_t *ticks)
+{
+    unsigned area=(off-0x94000u)/4096u;
+    assert(off>=0x94000u && area<3 && !(off&4095u)); *ticks=24000;
+    if(!ble_port_storage_idle()) return BLE_FLASH_REFUSED;
+    if(sim_flash_fault) return sim_flash_fault;
+    memset(sim_flash+area*4096u,255,4096); sim_erases[area]++; return 0;
+}
+int ble_port_flash_program(uint32_t off,const uint8_t *p,uint32_t n,uint32_t *ticks)
+{
+    unsigned i,area=(off-0x94000u)/4096u;
+    assert(off>=0x94000u && area<3 && n && n<=256 && (off&255u)+n<=256 && (off&4095u)+n<=3840);
+    *ticks=2400;
+    if(!ble_port_storage_idle()) return BLE_FLASH_REFUSED;
+    if(sim_flash_fault==1 || sim_flash_fault==2) return sim_flash_fault;
+    sim_programs[area]++;
+    for(i=0;i<n;i++) { assert((sim_flash[off-0x94000u+i]&p[i])==p[i]); sim_flash[off-0x94000u+i]&=p[i]; }
+    if(sim_flash_mismatch) sim_flash[off-0x94000u]^=1;
+    return sim_flash_fault;
+}
+void sim_storage_reset(void)
+{
+    memset(sim_flash,255,sizeof sim_flash); memset(sim_erases,0,sizeof sim_erases); memset(sim_programs,0,sizeof sim_programs);
+    sim_flash_fault=sim_flash_mismatch=sim_aes_fault=0; sim_flash_idle=1;
+}
+void sim_seed(void)
+{
+    static const uint8_t address[6]={0x58,0x65,0x67,0x8b,0x40,0x62};
+    ble_seed_boot(address,1,2,3);
+}

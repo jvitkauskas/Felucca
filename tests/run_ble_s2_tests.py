@@ -3,6 +3,7 @@
 import os,sys,subprocess
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
+os.environ['FELUCCA_BLE_STAGE']='2'
 import nimble_build as nb
 os.chdir(nb.ROOT)
 out=nb.ROOT/'build/s2-tests';out.mkdir(exist_ok=True,parents=True)

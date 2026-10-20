@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Pure r3 02 §§3.4,5.4-5.8,6; 03 §6.2 arithmetic. */
+/* Pure r4 02 §§3.4,5.4-5.8,6; 03 §6.2 arithmetic. */
 #include "ble_link.h"
 #include "ble_memory.h"
 uint8_t ble_map_count(const uint8_t map[5])
@@ -22,7 +22,7 @@ uint8_t ble_rx_class(uint16_t status,uint8_t n)
 {
     unsigned code=status&15u;
     if(code&4u) return 1; /* B, including 13 */
-    if(n>27) return 3;
+    if(n>BLE_LL_PAYLOAD_MAX) return 3;
     if(code==1) return 0;
     if(code==9) return 2;
     return 3;
@@ -59,27 +59,48 @@ int ble_instant_valid(uint16_t instant,uint16_t closed)
 }
 void ble_timeline_create(ble_timeline_t *t,const ble_conn_t *c,uint32_t now)
 {
-    memset(t,0,sizeof *t); t->sup=now+(uint32_t)c->timeout*240000u;
+    memset(t,0,sizeof *t); t->timeout=c->timeout; t->sup=now+(uint32_t)c->timeout*240000u;
     t->first=now+(uint32_t)(c->offset+1u)*30000u;
     t->est_end=t->first+(uint32_t)(5u*c->interval+c->win)*30000u+24000u;
     t->cutoff=t->first+(uint32_t)6u*c->interval*30000u;
 }
-uint8_t ble_timeline_rx(ble_timeline_t *t,const ble_conn_t *c,uint8_t cls,uint32_t now)
+void ble_timeline_arm(ble_timeline_t *t,uint32_t instant,uint32_t window,uint16_t timeout)
 {
+    t->inst_reset=instant; t->win_reset=window; t->new_timeout=timeout; t->win_pending=3;
+}
+static uint8_t timeline_due(ble_timeline_t *t,uint32_t now)
+{
+    while(t->win_pending) {
+        uint32_t when=(t->win_pending&2u) ? t->inst_reset : t->win_reset;
+        if((int32_t)(now-when)<0) break;
+        if(t->established && (int32_t)(when-t->sup)>=0) return 8; /* expiry wins ties */
+        t->timeout=t->new_timeout;
+        t->sup=when+(uint32_t)t->timeout*240000u;
+        t->win_pending&=(uint8_t)~((t->win_pending&2u) ? 2u : 1u);
+    }
+    return 0;
+}
+uint8_t ble_timeline_rx_delayed(ble_timeline_t *t,uint8_t cls,uint32_t stamp,uint32_t service,int delayed)
+{
+    uint8_t reason=timeline_due(t,delayed ? service : stamp);
+    uint32_t deadline;
+    if(reason) return reason;
     if(!t->established && cls<3) {
-        if((int32_t)(now-t->cutoff)>=0) return 0x3e;
+        if((int32_t)(stamp-t->cutoff)>=0) return 0x3e;
         t->established=1;
     }
-    if(cls==0 || cls==2) t->sup=now+(uint32_t)c->timeout*240000u;
+    deadline=stamp+(uint32_t)t->timeout*240000u;
+    if((cls==0 || cls==2) && (!delayed || (int32_t)(deadline-t->sup)>0)) t->sup=deadline;
     return 0;
+}
+uint8_t ble_timeline_rx(ble_timeline_t *t,const ble_conn_t *c,uint8_t cls,uint32_t now)
+{
+    (void)c; return ble_timeline_rx_delayed(t,cls,now,now,0);
 }
 uint8_t ble_timeline_check(ble_timeline_t *t,const ble_conn_t *c,uint32_t now)
 {
-    if(t->win_pending && (int32_t)(now-t->win_reset)>=0) {
-        uint32_t d=t->win_reset+(uint32_t)c->timeout*240000u;
-        if((int32_t)(d-t->sup)>0) t->sup=d;
-        t->win_pending=0;
-    }
+    uint8_t reason=timeline_due(t,now); (void)c;
+    if(reason) return reason;
     if(!t->established) return (int32_t)(now-t->est_end)>=0 ? 0x3e : 0;
     return (int32_t)(now-t->sup)>=0 ? 8 : 0;
 }

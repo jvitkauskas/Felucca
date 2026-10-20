@@ -155,3 +155,11 @@ performed. No specification, snapshot, review file, calibration/item store or
 reference firmware was modified. The unresolved numerical-table redistribution
 question inherited from S1 is unchanged; this audit makes no additional rights
 claim.
+
+## S2.1 / S3 continuation
+
+The S2 owner commit is 3581aba. The newer uncommitted work and frozen-r4
+input audit are in [BLE-S3-AUDIT.md](BLE-S3-AUDIT.md). The historical dates,
+HEAD and r3 manifest above describe S2 only; those snapshots were not reopened
+for the new task. Both stage artifacts, the stock comparison and native pairing
+tests are covered by the new audit.

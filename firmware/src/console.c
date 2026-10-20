@@ -391,6 +391,12 @@ static void cdc_task(void)                              /* main loop */
         con_puts("\r\nFelucca ");
         con_puts(FELUCCA_VERSION);
         con_puts(" console - 'help'\r\n> ");
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+        { ble_seed_diag_t seed; ble_seed_get_diag(&seed);
+          con_puts("BLE boot seed class/origin/persistence/sequence/credit ");
+          con_dec(seed.state); con_putc('/'); con_dec(seed.origin); con_putc('/'); con_dec(seed.persistence);
+          con_putc('/'); con_hex(seed.sequence,8); con_putc('/'); con_dec(seed.credit); con_puts("\r\n> "); }
+#endif
     }
     con.dtr_seen = cdc.dtr;
     while (ci_r != ci_w) {

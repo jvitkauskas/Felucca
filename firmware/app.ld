@@ -24,7 +24,7 @@ SECTIONS
     .ble_trace (NOLOAD) : { . = ALIGN(4); _ble_trace_start = .; *(.ble_trace) _ble_trace_end = .; } > RAMTEXT
     .data : { . = ALIGN(4); _data_start = .; *(.data*) *(.sdata*) . = ALIGN(4); _data_end = .; } > RAM AT > XIP
     _data_load = LOADADDR(.data);
-    .bss (NOLOAD) : { _bss_start = .; *(EXCLUDE_FILE (*nimble_*.o) .bss* .sbss*) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM
+    .bss (NOLOAD) : { _bss_start = .; *(.ble_host_ring) *(EXCLUDE_FILE (*nimble_*.o) .bss* .sbss*) *(COMMON) . = ALIGN(4); _bss_end = .; } > RAM
     .pool (NOLOAD) : { _pool_start = .; *(.pool*) *nimble_*.o(.bss* .sbss*) . = ALIGN(4); } > POOL
     .ble_dma (NOLOAD) : { _ble_dma_start = .; *(.ble_dma) . = ALIGN(4); _ble_dma_end = .; _pool_end = .; } > POOL
     ASSERT(_ble_trace_end <= ORIGIN(RAMTEXT) + LENGTH(RAMTEXT), "BLE trace exceeds RAMTEXT spare space")

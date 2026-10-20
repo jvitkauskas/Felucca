@@ -46,7 +46,13 @@ static inline void *fl_far(void *p) { void *volatile q = p; return q; }
 #define FL_IN(off, n, lo, hi) ((uint32_t)(off) >= (lo) && (uint32_t)(off) <= (hi) && \
                                (uint32_t)(n) <= (hi) - (uint32_t)(off))
 /* Felucca's own store (projects, user samples; settings) */
-#define FL_STORE_OK(off, n) (FL_IN(off, n, FL_DATA_LO, FL_DATA_HI) || FL_IN(off, n, FL_GLOB_LO, FL_GLOB_HI))
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+/* Seed A/B 0x94000/0x95000 and deferred bond journal 0x96000; never VM/BTIF. */
+#define FL_BLE_STORE_OK(off,n) FL_IN(off,n,0x94000u,0x97000u)
+#else
+#define FL_BLE_STORE_OK(off,n) 0
+#endif
+#define FL_STORE_OK(off, n) (FL_BLE_STORE_OK(off,n) || FL_IN(off, n, FL_DATA_LO, FL_DATA_HI) || FL_IN(off, n, FL_GLOB_LO, FL_GLOB_HI))
 /* Where the RAM driver may erase / program. The app build allows only its own
  * data regions; the update loader (firmware/loader) defines its own window. */
 #ifndef FL_RANGE_OK
@@ -140,6 +146,16 @@ RAMINL int fl_wait_ready(uint32_t max_us, uint32_t *took_us)
         if (dt > max_us) { *took_us = dt; return -4; }
     }
 }
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+RAMINL int fl_wait_issued(uint32_t issued,uint32_t normal,uint32_t extended,uint32_t *took_us)
+{
+    for(;;) {
+        uint32_t status=fl_rdsr(0x05),dt=(T4_CNT-issued)/24u;
+        if(!(status&1u)) { *took_us=dt; return dt<=normal ? 0 : -9; }
+        if(dt>=extended) { REG32(0x10000u)|=1u<<4; for(;;) ; }
+    }
+}
+#endif
 
 /* ---- entry points: IRQs OFF, args/buffers in RAM ---- */
 
@@ -172,9 +188,16 @@ static RAMFN int fl_erase4k_ram(uint32_t off, uint32_t *took_us)
     fl_wren();
     if (!(fl_rdsr(0x05) & 2u)) rc = -3;           /* WEL did not set */
     else {
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+        uint32_t issued=T4_CNT;
+#endif
         fl_cs(0); fl_tx(0x20); fl_addr(off); fl_cs(1);
         fl_inval(off, 4096u);
-        rc = fl_wait_ready(500000u, took_us);     /* generic NOR max 400 ms */
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+        rc=fl_wait_issued(issued,500000u,2000000u,took_us);
+#else
+        rc=fl_wait_ready(500000u,took_us);
+#endif
     }
     fl_exit(&s);
     return rc;
@@ -189,11 +212,18 @@ static RAMFN int fl_prog_ram(uint32_t off, const uint8_t *src, uint32_t n, uint3
     fl_wren();
     if (!(fl_rdsr(0x05) & 2u)) rc = -3;
     else {
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+        uint32_t issued=T4_CNT;
+#endif
         fl_cs(0); fl_tx(0x02); fl_addr(off);
         for (i = 0; i < n; i++) fl_tx(src[i]);
         fl_cs(1);
         fl_inval(off, n);
-        rc = fl_wait_ready(10000u, took_us);      /* generic NOR max 3 ms */
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+        rc=fl_wait_issued(issued,10000u,50000u,took_us);
+#else
+        rc=fl_wait_ready(10000u,took_us);
+#endif
     }
     fl_exit(&s);
     return rc;

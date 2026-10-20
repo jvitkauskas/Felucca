@@ -1,7 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include <string.h>
 #include "ble_s2_sim.h"
+#if FELUCCA_BLE_STAGE >= 3
+#include "../firmware/ble/ble_security.h"
+uint8_t sim_air[2][31],sim_air_len[2];
+#endif
 uint32_t sim_ticks,sim_starts,sim_stops,sim_windows,sim_applies;
+int sim_executor_enabled;
 int sim_stop_result=1,sim_slot[2]={-1,-1},sim_latency_enabled;
 ble_adv_t sim_advertising;
 static int refilling;
@@ -28,7 +33,12 @@ void ble_port_refill(void)
     unsigned i;
     if(refilling) return;
     refilling=1;
-    for(i=0;i<2;i++) if(sim_slot[i]<0) sim_slot[i]=ble_ll_tx_pick();
+    for(i=0;i<2;i++) if(sim_slot[i]<0) {
+        sim_slot[i]=ble_ll_tx_pick();
+#if FELUCCA_BLE_STAGE >= 3
+        if(sim_slot[i]>=0 && !ble_ll_tx_prepare((unsigned)sim_slot[i],sim_air[i],&sim_air_len[i])) sim_slot[i]=-1;
+#endif
+    }
     refilling=0;
 }
 void ble_port_rx_recover(void) { }
@@ -37,12 +47,19 @@ void ble_port_instant(uint8_t kind,uint16_t instant,const ble_conn_t *c) { (void
 void ble_port_apply(uint8_t kind,const ble_conn_t *c,uint16_t w,uint32_t win) { (void)kind; (void)c; (void)w; sim_windows=win; sim_applies++; }
 void ble_port_latency(uint16_t latency,int enabled) { sim_latency_enabled=enabled && latency; }
 void ble_port_priority(unsigned priority) { (void)priority; }
-void ble_port_host_idle(void) { sim_advance_us(100); }
-void sim_advance_us(uint32_t us) { sim_ticks+=us*24u; ble_ll_worker(); }
+void ble_port_pend(void) { }
+void ble_port_host_idle(void) { sim_advance_us(100); ble_worker(); }
+void sim_advance_us(uint32_t us) { sim_ticks+=us*24u; ble_ll_worker(); if(sim_executor_enabled) ble_worker(); }
 void sim_ack(unsigned slot)
 {
     int id=sim_slot[slot]; sim_slot[slot]=-1;
-    if(id>=0) ble_ll_tx_ack((unsigned)id);
+    if(id>=0) {
+#if FELUCCA_BLE_STAGE >= 3
+        uint8_t marker=ble_ll_tx_boundary((unsigned)id);
+        if(marker) (void)ble_ll_rx_marker(marker);
+#endif
+        ble_ll_tx_ack((unsigned)id);
+    }
     ble_port_refill();
 }
 void sim_reset(void)

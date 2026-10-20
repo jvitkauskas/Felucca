@@ -18,7 +18,9 @@
  * sequencer's step 0), BPM and the track's + the global SWING as the sequencer has them (seq.c
  * step_samples); sample exact. With the SLICER OFF and no ramp left, the signal is not touched. */
 #define SL_NPAT 16
-#if FELUCCA_BLE
+#if FELUCCA_BLE && FELUCCA_BLE_STAGE >= 3
+#define SL_LEN 1024u                    /* S3: STUT recording capped at 46.4 ms per track */
+#elif FELUCCA_BLE
 #define SL_LEN 2048u                    /* BLE: STUT recording capped at 92.9 ms per track */
 #else
 #define SL_LEN 4096u                    /* recording, 22.05 kHz samples a track: 186 ms, 8 KB */

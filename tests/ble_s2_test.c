@@ -113,10 +113,40 @@ static void timelines(void)
         assert(t.sup==origin+5000000u*24u);
         c.offset=3; c.win=2; ble_timeline_create(&t,&c,origin);
         assert(t.first==origin+5000u*24u && t.est_end==origin+158500u*24u && t.cutoff==origin+185000u*24u);
-        c=sim_connection(); c.timeout=100; t.established=1; t.sup=1240000u*24u; t.win_reset=243750u*24u; t.win_pending=1;
+        c=sim_connection(); c.timeout=100; t.established=1; t.sup=1240000u*24u; ble_timeline_arm(&t,240000u*24u,243750u*24u,100);
         assert(!ble_timeline_check(&t,&c,243750u*24u)); assert(t.sup==1243750u*24u);
         if(origin) break;
     }
+}
+static void r4_ordering(void)
+{
+    ble_conn_t c=sim_connection(); ble_timeline_t t; unsigned i; uint8_t value=1,type,p[32]; uint16_t n;
+    for(i=0;i<2;i++) {
+        uint32_t base=i ? 0xffff0000u : 0;
+        ble_timeline_create(&t,&c,base); t.established=1; t.sup=base+160000u*24u;
+        ble_timeline_arm(&t,base+180000u*24u,base+185000u*24u,10);
+        assert(ble_timeline_check(&t,&c,base+185000u*24u)==8); /* never rescued */
+        ble_timeline_arm(&t,base+160000u*24u,base+165000u*24u,10);
+        assert(ble_timeline_check(&t,&c,base+185000u*24u)==8); /* expiry wins tie */
+        ble_timeline_arm(&t,base+150000u*24u,base+155000u*24u,10);
+        assert(!ble_timeline_check(&t,&c,base+156000u*24u));
+        assert(t.sup==base+255000u*24u);
+        assert(!ble_timeline_rx_delayed(&t,0,base+80000u*24u,base+170000u*24u,1));
+        assert(t.sup==base+255000u*24u); /* lower-bound refresh never regresses */
+    }
+    ready(); ble_ll_create(&c,sim_ticks); ble_worker();
+    for(i=0;i<19;i++) assert(ble_ll_rx(1,0x102,&value,sim_ticks,0));
+    assert(ble_ll_rx_marker(1) && ble_ll_rx_marker(2));
+    assert(!ble_ll_rx_marker(1)); /* two reserved marker entries */
+    ble_ll_worker(); ble_ll_worker(); assert(ble_link.diag.epoch_markers==2);
+    for(i=0;i<19;i++) assert(ble_ll_poll(&type,p,&n) && type==2 && p[4]==1);
+    ble_ll_close(8); ble_ll_worker(); ble_worker();
+    ble_ll_create(&c,sim_ticks); { ble_link_diag_t d; ble_ll_get_diag(&d); assert(d.reason==8); }
+    ready();
+    { uint8_t mask[11]={1,12,8},reset[3]={3,12,0}; unsigned before=count;
+      assert(!ble_hci_send(1,mask,sizeof mask)); assert(!ble_hci_send(1,reset,3));
+      ble_worker(); assert(count==before+1 && events[count-1][5]==0x0c);
+      ble_worker(); assert(count==before+2 && ble_get16(events[count-1]+3)==0x0c03 && !events[count-1][5]); }
 }
 static void controls_and_credits(void)
 {
@@ -156,7 +186,7 @@ static void instants_and_pressure(void)
     ble_link.time.first=0; ble_link.anchor=0; ble_link.anchor_seen=1; ble_worker();
     assert(ble_ll_rx(1,0xc03,update,0,0)); ble_ll_worker(); assert(ble_link.instant_kind==1);
     for(i=0;i<8;i++) { sim_ticks=(i*30000u+1000u)*24u; ble_ll_event((uint16_t)i,sim_ticks); }
-    assert(sim_applies==1 && ble_link.conn.interval==24 && ble_link.time.sup==1240000u*24u);
+    assert(sim_applies==1 && ble_link.conn.interval==24 && ble_link.time.sup==5000000u*24u);
     sim_ticks=243750u*24u; ble_ll_worker();
     assert(ble_link.conn.interval==12 && ble_link.time.sup==1243750u*24u);
     assert(ble_ll_poll(&type,p,&n) && p[2]==3 && ble_get16(p+6)==12);
@@ -199,20 +229,20 @@ static void instants_and_pressure(void)
 static void hci(void)
 {
     uint8_t data[32]={0},cmd[3]={1,16,0}; unsigned before,i;
-    static const uint16_t mandatory[]={0x0c03,0x1001,0x1002,0x1003,0x1009,0x0c01,0x2001,0x2002,0x2003,0x2008,0x2009,0x2006,0x200a,0x2016,0x2018,0x201a,0x201b,0x0406};
+    static const uint16_t mandatory[]={0x0c03,0x1001,0x1002,0x1003,0x1009,0x0c01,0x2001,0x2002,0x2003,0x2008,0x2009,0x2006,0x200a,0x2016,0x0406};
     ready();
-    assert(!command(0x1002,0,0)); assert(events[count-1][6]==0x20 && events[count-1][6+27]==0xa0);
+    assert(!command(0x1002,0,0)); assert(events[count-1][6]==0x20 && events[count-1][6+27]==0x20);
     for(i=0;i<sizeof mandatory/sizeof mandatory[0];i++) {
         if(mandatory[i]==0x0c03) continue;
         command(mandatory[i],0,0); assert(events[count-1][5]!=1 || events[count-1][0]==15);
     }
-    assert(command(0x2018,0,0)==3 && lengths[count-1]==6);
+    assert(command(0x2018,0,0)==1 && lengths[count-1]==6);
     assert(command(0x2016,data,2)==2 && events[count-1][0]==15);
     assert(command(0x0406,data,3)==2 && events[count-1][0]==15);
     assert(command(0xffff,0,0)==1);
     assert(ble_hci_send(1,cmd,2)); before=count;
     for(i=0;i<100;i++) assert(!ble_hci_send(1,cmd,3));
-    for(i=0;i<4;i++) ble_worker();
+    for(i=0;i<100;i++) ble_worker();
     assert(count-before==100);
     assert(!command(0x0c03,0,0));
 }
@@ -306,6 +336,6 @@ static void midi(void)
 int main(void)
 {
     frame_window_and_breadcrumb();
-    logic(); timelines(); controls_and_credits(); instants_and_pressure(); hci(); masks_and_controls(); reset_live(); midi();
+    logic(); timelines(); r4_ordering(); controls_and_credits(); instants_and_pressure(); hci(); masks_and_controls(); reset_live(); midi();
     puts("BLE S2 frame alignment, breadcrumbs, logic, HCI, lifecycle, credits, and MIDI tests: PASS"); return 0;
 }

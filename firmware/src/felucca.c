@@ -58,6 +58,9 @@
 #if FELUCCA_BLE
 #include "fm1_flash.h"
 #include "fm1_ble.h"
+#if FELUCCA_BLE_STAGE >= 3
+#include "fm1_ble_crypto.h"
+#endif
 static volatile uint8_t ble_t5_active,ble_worker_active,ble_audio_measuring;
 static uint32_t ble_audio_nested_snapshot;
 #endif

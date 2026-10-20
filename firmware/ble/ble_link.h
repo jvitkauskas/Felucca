@@ -3,7 +3,9 @@
 #define FELUCCA_BLE_LINK_H
 #include "ble_s1.h"
 #define BLE_RX_BACKLOG 19u
-#define BLE_TX_COUNT 13u
+#define BLE_RX_STREAM (BLE_RX_BACKLOG+2u) /* boundary markers do not consume PDU capacity */
+#define BLE_TX_COUNT (FELUCCA_BLE_STAGE>=3 ? 15u : 13u)
+#define BLE_LL_PAYLOAD_MAX (FELUCCA_BLE_STAGE>=3 ? 31u : 27u)
 #define BLE_HANDLE 0x50u
 #define BLE_TICKS_US 24u
 #define BLE_INSTANT_GUARD_US 1000u
@@ -24,12 +26,17 @@ typedef struct {
     uint8_t win,sca,hop,map[5],peer[6],peer_type;
     uint32_t aa,crc;
 } ble_conn_t;
-typedef struct { uint32_t sup,first,est_end,cutoff,win_reset; uint8_t established,win_pending; } ble_timeline_t;
+typedef struct {
+    uint32_t sup,first,est_end,cutoff,inst_reset,win_reset;
+    uint16_t timeout,new_timeout;
+    uint8_t established,win_pending;
+} ble_timeline_t;
 typedef struct {
     uint32_t epoch,created,accepted,invalid,events,rx_class[4],repetitions,rx_backpressure;
     uint32_t acl_in,acl_out,acl_rejected,acknowledged,ncp,flushed,ctrl_drop,ignored;
     uint32_t establishment_fail,supervision_fail,disconnects,updates,map_updates,late_instants;
     uint32_t worker_gap_ticks,worker_max_ticks,worker_over_gap,rx_delayed,worker_calls,terminate_timeouts;
+    uint32_t epoch_markers;
     uint16_t interval,latency,timeout,event,rx_used,tx_used,rx_peak;
     uint8_t state,established,reason,peer_features[8];
 } ble_link_diag_t;
@@ -58,11 +65,14 @@ int ble_instant_valid(uint16_t instant,uint16_t closed);
 void ble_timeline_create(ble_timeline_t *t,const ble_conn_t *c,uint32_t now);
 uint8_t ble_timeline_rx(ble_timeline_t *t,const ble_conn_t *c,uint8_t cls,uint32_t now);
 uint8_t ble_timeline_check(ble_timeline_t *t,const ble_conn_t *c,uint32_t now);
+void ble_timeline_arm(ble_timeline_t *t,uint32_t instant,uint32_t window,uint16_t timeout);
+uint8_t ble_timeline_rx_delayed(ble_timeline_t *t,uint8_t cls,uint32_t stamp,uint32_t service,int delayed);
 int ble_missed_step(int fine,uint32_t raw,unsigned phase,int *next,unsigned *drift);
 void ble_ll_init(void);
 void ble_ll_reset(void);
 void ble_ll_create(const ble_conn_t *c,uint32_t now);
 int ble_ll_rx_room(void);
+int ble_ll_rx_marker(uint8_t marker);
 int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,int delayed);
 int ble_ll_rx(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event);
 void ble_ll_event(uint16_t event,uint32_t now);
@@ -79,6 +89,7 @@ uint8_t ble_ll_disconnect(uint16_t handle,uint8_t reason);
 uint8_t ble_ll_features(uint16_t handle);
 int ble_ll_poll(uint8_t *type,uint8_t *p,uint16_t *n);
 void ble_ll_get_diag(ble_link_diag_t *d);
+int ble_ll_pending(void);
 /* HAL implemented in the Felucca adapter; tests use a simulated radio. */
 uint32_t ble_port_lock(void);
 void ble_port_unlock(uint32_t key);

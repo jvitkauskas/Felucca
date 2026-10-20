@@ -13,9 +13,17 @@
 #define MYNEWT_VAL_BLE_ROLE_BROADCASTER 0
 #define MYNEWT_VAL_BLE_WHITELIST 0
 #define MYNEWT_VAL_BLE_HS_FLOW_CTRL 0
+#if FELUCCA_BLE_STAGE >= 3
+#define MYNEWT_VAL_BLE_SM_LEGACY 1
+#define MYNEWT_VAL_BLE_SM_SC 1
+#define MYNEWT_VAL_BLE_SM_SC_DEBUG_KEYS 0
+#define MYNEWT_VAL_TRNG 0
+#define MYNEWT_VAL_BLE_STORE_MAX_BONDS 2
+#else
 #define MYNEWT_VAL_BLE_SM_LEGACY 0
 #define MYNEWT_VAL_BLE_SM_SC 0
-#define MYNEWT_VAL_BLE_SM_LVL 1
+#endif
+#define MYNEWT_VAL_BLE_SM_LVL (FELUCCA_BLE_STAGE>=3 ? 2 : 1)
 #define MYNEWT_VAL_BLE_ATT_PREFERRED_MTU 200
 #define MYNEWT_VAL_BLE_ATT_SVR_QUEUED_WRITE 0
 #define MYNEWT_VAL_BLE_ATT_SVR_MAX_PREP_ENTRIES 0
@@ -27,7 +35,13 @@
 #define MYNEWT_VAL_BLE_TRANSPORT_LL__custom 1
 #define MYNEWT_VAL_BLE_TRANSPORT_ACL_FROM_HS_COUNT 1
 #define MYNEWT_VAL_BLE_TRANSPORT_ACL_FROM_LL_COUNT 24
+#if FELUCCA_BLE_STAGE >= 3
+/* HCI still advertises 27. SMP pulls the complete 64-byte public key into
+ * the first mbuf; its pool must have contiguous room after L2CAP reassembly. */
+#define MYNEWT_VAL_BLE_TRANSPORT_ACL_SIZE 72
+#else
 #define MYNEWT_VAL_BLE_TRANSPORT_ACL_SIZE 27
+#endif
 #define MYNEWT_VAL_BLE_TRANSPORT_EVT_COUNT 20
 #define MYNEWT_VAL_BLE_TRANSPORT_EVT_DISCARDABLE_COUNT 0
 #define MYNEWT_VAL_BLE_TRANSPORT_EVT_SIZE 70
@@ -41,7 +55,6 @@
 #define MYNEWT_VAL_OS_TICKS_PER_SEC 1000
 #define MYNEWT_VAL_OS_MEMPOOL_POISON 0
 #define MYNEWT_VAL_OS_MEMPOOL_GUARD 0
-/* Pairing is intentionally off in S2. S3 will enable host software SC and
- * legacy fallback, and add the persistent-seed service before claiming LE
- * Encryption. The HCI feature and LL feature first octet are zero in S2. */
+/* S2 disables pairing and reports no LE Encryption. S3 enables software
+ * SC/legacy and the boot-seeded entropy service before claiming Encryption. */
 #endif

@@ -187,6 +187,9 @@ def build_app():
     ble = os.environ.get("FELUCCA_BLE") == "1"
     extra = []
     if ble:
+        stage=os.environ.get("FELUCCA_BLE_STAGE","3")
+        if stage not in ("2","3"): raise SystemExit("FELUCCA_BLE_STAGE must be 2 or 3")
+        flags.append(f"-DFELUCCA_BLE_STAGE={stage}")
         dbm = os.environ.get("FELUCCA_BLE_TX_DBM")
         if dbm is not None:
             if not re.fullmatch(r"-?\d+", dbm) or not -127 <= int(dbm) <= 20:
@@ -222,13 +225,13 @@ def build_app():
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
     if ble:
-        for source in ("ble_logic", "ble_controller", "ble_link_logic", "ble_link", "ble_midi", "ble_heap"):
+        for source in ("ble_logic", "ble_controller", "ble_link_logic", "ble_link", "ble_midi", "ble_heap") + (("ble_crypto", "ble_seed") if stage=="3" else ()):
             obj = OUT / f"{source}.o"
-            tc("cc", *flags, "-Wextra", "-Werror", "-std=c11", "-Ifirmware/ble", "-c",
+            tc("cc", *flags, "-Wextra", "-Werror", "-std=c11", "-Ifirmware/ble", "-Ifirmware/third_party/nimble/ext/tinycrypt/include", "-c",
                FW / "ble" / f"{source}.c", "-o", obj)
             extra.append(obj)
         import nimble_build
-        for i,source in enumerate([*nimble_build.sources(),FW/"ble/ble_npl.c",FW/"ble/ble_host.c"]):
+        for i,source in enumerate([*nimble_build.sources(),FW/"ble/ble_npl.c",FW/"ble/ble_host.c",*([FW/"ble/ble_bonds.c"] if stage=="3" else [])]):
             obj=OUT/f"nimble_{i}_{source.stem}.o"
             tc("cc",*flags,"-Wextra","-Werror",*nimble_build.flags(target=True,vendor=source.is_relative_to(nimble_build.BASE)),
                "-std=c11","-c",source,"-o",obj)

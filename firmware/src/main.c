@@ -36,6 +36,9 @@ void fm1_timer5_irq(void)
         while (acc >= 1000u * FM1_TICKS_PER_US) {
             acc -= 1000u * FM1_TICKS_PER_US;
             fm1_ms++;
+#if FELUCCA_BLE
+            if(fm1_ms%10u==0u) fm1_ble_worker_pend();
+#endif
         }
     }
     if (usb_due)

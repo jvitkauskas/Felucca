@@ -1,0 +1,12 @@
+Felucca BLE s2.1 — uncommitted above 3581aba; frozen r4
+Package: felucca-ble-s2.1.fwsc; 609849 B
+SHA256: e555e67b93de406f0aef538b3bfa7151459ada14653049610dc43ff62b01d7ad
+App: 488956 / 581564 B; free 92608 B
+App SHA256: 106ad47b76a962aec408b4d6d2cb612f1adaaabcc9006d566a3da4496e088e20
+Static RAM allocation incl. alignment: 96292 / 98304 B; free 2012 B
+Pool incl. DMA: 335268 / 344064 B; free 8796 B
+DMA: 4340 B at 0x01c70cb0
+Trace: 20480 B at 0x01c00b48
+RAM text: 2888 B
+User / supervisor stacks: 24320 / 7936 B, physical high water unmeasured
+No device, USB, network host, flashing or commit operation.

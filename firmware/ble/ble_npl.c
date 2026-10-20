@@ -4,6 +4,7 @@
 #include "nimble/nimble_port.h"
 #include "ble_s1.h"
 #include "ble_host.h"
+#include "ble_link.h"
 static struct ble_npl_eventq default_q;
 static struct ble_npl_callout *callouts;
 static unsigned critical_depth;
@@ -50,7 +51,7 @@ ble_npl_error_t ble_npl_sem_pend(struct ble_npl_sem *s,ble_npl_time_t timeout)
      * ACK path are pumped; never recurse into a host event or a callout. */
     do {
         if(s->tokens) { s->tokens--; return 0; }
-        ble_host_pump_controller();
+        ble_host_wait_step();
     } while((uint32_t)(ble_port_ms()-start)<timeout);
     return BLE_NPL_TIMEOUT;
 }
@@ -79,9 +80,9 @@ ble_npl_error_t ble_npl_time_ms_to_ticks(uint32_t ms,ble_npl_time_t *out) { *out
 ble_npl_error_t ble_npl_time_ticks_to_ms(ble_npl_time_t ticks,uint32_t *out) { *out=ticks; return 0; }
 ble_npl_time_t ble_npl_time_ms_to_ticks32(uint32_t ms) { return ms; }
 uint32_t ble_npl_time_ticks_to_ms32(ble_npl_time_t ticks) { return ticks; }
-void ble_npl_time_delay(ble_npl_time_t ticks) { uint32_t start=ble_port_ms(); while((uint32_t)(ble_port_ms()-start)<ticks) ble_host_pump_controller(); }
-uint32_t ble_npl_hw_enter_critical(void) { critical_depth++; return 0; }
-void ble_npl_hw_exit_critical(uint32_t key) { (void)key; if(critical_depth) critical_depth--; }
+void ble_npl_time_delay(ble_npl_time_t ticks) { uint32_t start=ble_port_ms(); while((uint32_t)(ble_port_ms()-start)<ticks) ble_host_wait_step(); }
+uint32_t ble_npl_hw_enter_critical(void) { uint32_t key=ble_port_lock(); critical_depth++; return key; }
+void ble_npl_hw_exit_critical(uint32_t key) { if(critical_depth) critical_depth--; ble_port_unlock(key); }
 bool ble_npl_hw_is_in_critical(void) { return critical_depth!=0; }
 void ble_npl_poll(void)
 {

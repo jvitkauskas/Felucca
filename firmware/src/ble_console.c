@@ -23,13 +23,41 @@ static void con_ble_status(void)
         uint32_t k=fm1_ble_irq_save(); hw=br_diag; fm1_ble_irq_restore(k);
         ble_get_diag(&d);
     }
-    con_puts("BLE S2 / NimBLE 1.9.0 / MIDI; encryption off\r\n");
+#if FELUCCA_BLE_STAGE >= 3
+    con_puts("BLE S3 / NimBLE 1.9.0 / MIDI; SC Just Works + legacy\r\n");
+    {
+        ble_security_diag_t enc; ble_seed_diag_t seed; ble_bond_diag_t bond;
+        ble_security_get_diag(&enc); ble_seed_get_diag(&seed); ble_bonds_get_diag(&bond);
+        con_kv("enc_phase_N_S1_S2_PA_PB_PC",enc.phase); con_kv("enc_rx_on",enc.rx_on); con_kv("enc_tx_on",enc.tx_on);
+        con_kv("enc_enabled",enc.encrypted); con_kv("enc_starts",(int32_t)enc.starts); con_kv("enc_refreshes",(int32_t)enc.refreshes);
+        con_kv("mic_failures",(int32_t)enc.mic_failures); con_kv("enc_phase_errors",(int32_t)enc.phase_errors);
+        con_kv("ltk_requests",(int32_t)enc.ltk_requests); con_kv("ltk_negative",(int32_t)enc.negative_replies);
+        con_kv("enc_tx_counter_hi",(int32_t)(enc.tx_counter>>32)); con_kx("enc_tx_counter_lo",(uint32_t)enc.tx_counter);
+        con_kv("enc_rx_counter_hi",(int32_t)(enc.rx_counter>>32)); con_kx("enc_rx_counter_lo",(uint32_t)enc.rx_counter);
+        con_kv("seed_FAILED_FIRST_CHAINED_PROVISIONED_UNPERSISTED",seed.state); con_kv("seed_origin",seed.origin);
+        con_kv("seed_STORED_NOT_STORED_UNVERIFIED",seed.persistence); con_kx("seed_sequence",seed.sequence);
+        con_kv("seed_credit_bits",seed.credit); con_kv("seed_malformed",(int32_t)seed.malformed); con_kv("seed_conflicts",(int32_t)seed.conflicts);
+        con_kv("seed_flash_failures",(int32_t)seed.flash_failures); con_kv("le_rand_calls",(int32_t)seed.rand_calls);
+        con_kv("entropy_bytes",(int32_t)seed.bytes); con_kv("reseed_attempts",(int32_t)seed.reseed_attempts);
+        con_kv("bond_records",bond.records); con_kv("bond_pending",bond.pending); con_kv("bond_writes",(int32_t)bond.writes);
+        con_kv("bond_erases",(int32_t)bond.erases); con_kv("bond_failures",(int32_t)bond.failures); con_kv("bond_malformed",(int32_t)bond.malformed);
+        con_kv("bond_pair_method_legacy1_SC2",bond.method);
+    }
+#else
+    con_puts("BLE S2.1 / NimBLE 1.9.0 / MIDI; encryption off\r\n");
+#endif
     {
         ble_breadcrumb_t b; uint32_t timer[8],k=fm1_ble_irq_save();
         b=fm1_ble_breadcrumb; fm1_ble_worker_timer_readback(timer);
         timer[4]=br_diag.worker_timer_calls; timer[5]=br_diag.worker_timer_gap_ticks;
         timer[6]=br_diag.worker_timer_over_gap; timer[7]=br_diag.worker_timer_last_ticks;
         fm1_ble_irq_restore(k);
+        con_kv("executor_selftest",(int32_t)hw.executor_selftest);
+        con_kv("executor_dispatch_max_us",(int32_t)(hw.executor_dispatch_ticks/24u));
+        con_kv("executor_pass_max_us",(int32_t)(hw.executor_pass_ticks/24u));
+        con_kv("executor_over_250us",(int32_t)hw.executor_over_budget);
+        con_kv("refill_max_us",(int32_t)(hw.refill_max_ticks/24u));
+        con_kv("refill_over_60us",(int32_t)hw.refill_over_60us);
         con_kv("worker_timer_calls",(int32_t)timer[4]);
         con_kv("worker_timer_max_gap_us",(int32_t)(timer[5]/24u));
         con_kv("worker_timer_over_7500us",(int32_t)timer[6]);
@@ -70,6 +98,12 @@ static void con_ble_status(void)
         con_kv("nimble_syncs",(int32_t)host.syncs); con_kv("nimble_resets",(int32_t)host.resets);
         con_kv("nimble_error",(int32_t)host.error); con_kv("nimble_assertions",(int32_t)host.assertions);
         con_kv("nimble_event_drop",(int32_t)host.event_drop); con_kv("nimble_acl_drop",(int32_t)host.acl_drop);
+#if FELUCCA_BLE_STAGE >= 3
+        con_kv("nimble_encrypted",host.encrypted); con_kv("nimble_bonded",host.bonded); con_kv("nimble_key_size",host.key_size);
+        con_kv("nimble_pair_method_legacy1_SC2",host.pair_method); con_kv("security_requests",(int32_t)host.security_requests);
+        con_kv("pair_failures",(int32_t)host.pair_failures);
+        con_kv("pair_last_status",(int32_t)host.pair_status);
+#endif
         con_kv("nimble_main_gap_ms",(int32_t)host.main_gap_ms); con_kv("nimble_mtu",host.mtu);
         con_kv("midi_echo",host.echo); con_kv("nimble_subscribed",host.subscribed); con_kv("nimble_heap_used",(int32_t)host.heap_used);
         con_kv("nimble_heap_peak",(int32_t)host.heap_peak); con_kv("nimble_heap_fail",(int32_t)host.heap_fail);

@@ -6,6 +6,9 @@ typedef struct {
     uint32_t syncs,resets,error,event_drop,acl_drop,midi_in,midi_out,midi_bad,midi_drop;
     uint32_t main_gap_ms,heap_used,heap_peak,heap_fail,assertions;
     uint16_t connection,mtu; uint8_t synced,subscribed,running,echo;
+#if FELUCCA_BLE_STAGE >= 3
+    uint32_t security_requests,pair_failures,pair_status; uint8_t encrypted,bonded,key_size,pair_method;
+#endif
 } ble_host_diag_t;
 void ble_host_start(void);
 void ble_host_worker(void);
@@ -15,6 +18,6 @@ void ble_host_echo(int enabled);
 void ble_host_get_diag(ble_host_diag_t *d);
 void ble_host_midi_out(uint32_t usb_packet,uint32_t ms);
 int ble_host_midi_take(uint32_t *usb_packet,uint32_t *ms);
-void ble_host_pump_controller(void);
+void ble_host_wait_step(void);
 void ble_host_assert(const char *file,int line);
 #endif

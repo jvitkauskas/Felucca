@@ -8,10 +8,15 @@
 static ble_cal_t ble_cal;
 static uint8_t ble_random_config[6],ble_started;
 #include "../ble/ble_host.h"
+#if FELUCCA_BLE_STAGE >= 3
+#include "../ble/ble_seed.h"
+#include "../ble/ble_bonds.h"
+#endif
+void ble_port_pend(void) { fm1_ble_worker_pend(); }
 uint32_t ble_port_lock(void) { return fm1_ble_irq_save(); }
 void ble_port_unlock(uint32_t key) { fm1_ble_irq_restore(key); }
 void ble_port_refill(void) { bb_refill(); }
-void ble_port_rx_recover(void) { if(bb.state==4) bb_connected_rx(fm1_ticks()); }
+void ble_port_rx_recover(void) { if(bb.state==4) bb_connected_rx(fm1_ticks(),1); }
 void ble_port_window(uint32_t us) { bb_window(us); }
 void ble_port_priority(unsigned p) { bb_priority(p); }
 void ble_port_latency(uint16_t latency,int enabled) { bb_latency(latency,enabled); }
@@ -23,22 +28,38 @@ void ble_port_apply(uint8_t kind,const ble_conn_t *c,uint16_t widening,uint32_t 
 void ble_port_host_idle(void) { fm1_wdt_feed(); }
 void fm1_ble_worker_irq(void)
 {
-    uint32_t start=fm1_ticks(),key,gap=start-br_diag.worker_timer_last_ticks;
-    fm1_ble_worker_timer_ack();
-    bb_mark_event(BLE_STAGE_WORKER);
-    if(br_diag.worker_timer_calls) {
-        if(gap>br_diag.worker_timer_gap_ticks) br_diag.worker_timer_gap_ticks=gap;
-        if(gap>7500u*24u) br_diag.worker_timer_over_gap++;
+    static uint32_t chain_start;
+    uint32_t start=fm1_ticks(),key=fm1_ble_irq_save(),gap=start-br_diag.worker_timer_last_ticks;
+    fm1_ble_worker_timer_ack(); ble_llx_running=1;
+    if(ble_llx_pending) {
+        uint32_t dispatch=start-ble_llx_request_ticks;
+        if(dispatch>br_diag.executor_dispatch_ticks) br_diag.executor_dispatch_ticks=dispatch;
     }
+    ble_llx_pending=0;
+    if(br_diag.worker_timer_calls && gap>br_diag.worker_timer_gap_ticks) br_diag.worker_timer_gap_ticks=gap;
+    if(br_diag.worker_timer_calls && gap>7500u*24u) br_diag.worker_timer_over_gap++;
     br_diag.worker_timer_calls++; br_diag.worker_timer_last_ticks=start;
+    fm1_ble_irq_restore(key);
+    if(!ble_llx_testing) {
+        bb_mark_event(BLE_STAGE_WORKER);
+        fm1_ble_service(); ble_ll_worker();
+        if((uint32_t)(fm1_ticks()-start)<125u*24u) ble_worker(); else ble_port_pend();
+    }
     key=fm1_ble_irq_save();
-    ble_worker_active=1; start=fm1_ticks(); fm1_ble_irq_restore(key);
-    ble_ll_worker();
-    key=fm1_ble_irq_save();
-    /* Radio preemptions inside this worker are already inside its elapsed
-     * time. Exclude the combined interval from render CPU exactly once. */
-    if(ble_audio_measuring) t5_nested_ticks+=fm1_ticks()-start;
-    ble_worker_active=0; fm1_ble_irq_restore(key);
+    { uint32_t elapsed=fm1_ticks()-start;
+      if(elapsed>br_diag.executor_pass_ticks) br_diag.executor_pass_ticks=elapsed;
+      if(elapsed>250u*24u) br_diag.executor_over_budget++; }
+    ble_llx_running=0;
+    if(!ble_llx_testing) {
+        uint32_t delay=ble_llx_pending ? 6u : 6000u;
+        if(!ble_llx_pending) chain_start=0;
+        else if(!chain_start) chain_start=start;
+        else if((uint32_t)(start-chain_start)>=24000000u) {
+            delay=60000u; chain_start=0; br_diag.executor_starvation++;
+        }
+        fm1_ble_worker_timer_arm(delay);
+    }
+    fm1_ble_irq_restore(key);
 }
 
 uint32_t ble_port_ticks(void) { return fm1_ticks(); }
@@ -72,16 +93,52 @@ static void ble_irq_account(uint32_t t0,int rx)
 }
 void fm1_ble_rx_irq(void)
 {
-    uint32_t t=fm1_ticks(); fm1_ble_rx_body(); ble_irq_account(t,1);
+    uint32_t t=fm1_ticks(); fm1_ble_rx_body(); ble_port_pend(); ble_irq_account(t,1);
 }
 void fm1_ble_event_irq(void)
 {
-    uint32_t t=fm1_ticks(); fm1_ble_event_body(); ble_irq_account(t,0);
+    uint32_t t=fm1_ticks(); fm1_ble_event_body(); ble_port_pend(); ble_irq_account(t,0);
 }
 static int ble_flash_plain(uint32_t off,uint8_t *out,uint32_t n)
 {
     return flash_ok ? fm1_ble_flash_read(off,out,n) : -1;
 }
+#if FELUCCA_BLE_STAGE >= 3
+int ble_port_storage_idle(void) { return bb.state==0 && !fm1_ble_link_active(); }
+int ble_port_flash_read(uint32_t off,uint8_t *out,uint32_t n)
+{
+    if(!flash_ok || off<0x94000u || off>0x97000u || n>0x97000u-off) return -1;
+    return fm1_ble_flash_read(off,out,n);
+}
+static int ble_flash_result(int rc)
+{
+    return rc==0 ? BLE_FLASH_OK : rc==-1 || rc==-8 ? BLE_FLASH_REFUSED :
+        rc==-2 || rc==-3 ? BLE_FLASH_NOT_ISSUED : BLE_FLASH_LATE_READY;
+}
+int ble_port_flash_erase(uint32_t off,uint32_t *ticks)
+{
+    uint32_t us=0,key; int rc;
+    *ticks=0;
+    if(off<0x94000u || off>=0x97000u || (off&4095u)) return BLE_FLASH_REFUSED;
+    if(!flash_ok) return BLE_FLASH_NOT_ISSUED;
+    fm1_wdt_feed(); key=fm1_ble_icfg_read(); fm1_ble_icfg_write(key&~(1u<<8));
+    if(!ble_port_storage_idle()) { fm1_ble_icfg_write(key); return BLE_FLASH_REFUSED; }
+    audio_silence(); rc=FL_FAR(fl_erase4k_ram)(off,&us);
+    fm1_ble_icfg_write(key); fm1_wdt_feed(); *ticks=us*24u; return ble_flash_result(rc);
+}
+int ble_port_flash_program(uint32_t off,const uint8_t *data,uint32_t n,uint32_t *ticks)
+{
+    uint32_t us=0,key; int rc;
+    *ticks=0;
+    if(!n || n>256 || (off&255u)+n>256u || off<0x94000u || off>0x97000u || n>0x97000u-off)
+        return BLE_FLASH_REFUSED;
+    if(!flash_ok) return BLE_FLASH_NOT_ISSUED;
+    fm1_wdt_feed(); key=fm1_ble_icfg_read(); fm1_ble_icfg_write(key&~(1u<<8));
+    if(!ble_port_storage_idle()) { fm1_ble_icfg_write(key); return BLE_FLASH_REFUSED; }
+    audio_silence(); rc=FL_FAR(fl_prog_ram)(off,data,n,&us);
+    fm1_ble_icfg_write(key); fm1_wdt_feed(); *ticks=us*24u; return ble_flash_result(rc);
+}
+#endif
 static void ble_platform_irq_probe(void)
 {
     uint32_t outer=fm1_ble_irq_save(),before,inner;
@@ -103,6 +160,10 @@ static void ble_platform_prepare(void)
     memcpy(ble_random_config,configured,6);
 #endif
     ble_read_cal(ble_flash_plain,&ble_cal);
+#if FELUCCA_BLE_STAGE >= 3
+    { uint32_t r64[2]; fm1_ble_r64_snapshot(r64);
+      ble_seed_boot(ble_cal.public_addr,(uint32_t)fm1_boot.p3_rst|(fm1_boot.rst_src<<8),r64[0],r64[1]); }
+#endif
     br_clock_probe();
 }
 /* P4, immediately after P5: both BLE CPU lines are still masked. */
@@ -118,7 +179,7 @@ static void ble_platform_worker(void)
 {
     uint32_t packet,stamp;
     bb_mark_event(BLE_STAGE_HOST);
-    fm1_ble_service(); ble_worker(); ble_host_worker();
+    ble_host_worker();
     for(;;) {
         uint32_t k=fm1_ble_irq_save(),cin;
         /* Keep eight input slots for USB/UART. Retain decoded BLE messages

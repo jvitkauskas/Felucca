@@ -48,7 +48,7 @@ static void event(void)
     }
     ble_ll_event(peer_event_n++,sim_ticks);
     ble_link.rx_seen=ble_link.valid_seen=0;
-    ble_ll_worker(); ble_host_worker();
+    sim_advance_us(0); ble_host_worker();
 }
 static void control(const uint8_t *p,unsigned n)
 {
@@ -63,7 +63,7 @@ static void request(const uint8_t *p,unsigned n,int expect_response)
         assert(ble_ll_rx(1,(uint16_t)((take<<8)|(off ? 1u : 2u)),b+off,sim_ticks,peer_event_n));
         off+=take;
     }
-    ble_ll_worker(); ble_host_worker();
+    sim_advance_us(0); ble_host_worker();
     for(i=0;i<10 && att_count==before;i++) event();
     if(expect_response) assert(att_count>before);
 }
@@ -71,7 +71,7 @@ static void connected(void)
 {
     ble_conn_t c=sim_connection(); unsigned i;
     peer_event_n=0; l2_n=l2_want=0; sim_slot[0]=sim_slot[1]=-1;
-    ble_ll_create(&c,sim_ticks); ble_host_worker();
+    ble_ll_create(&c,sim_ticks); sim_advance_us(0); ble_host_worker();
     control((uint8_t[9]){8,0xff,1,2,3,4,5,6,7},9);
     control((uint8_t[6]){12,6,1,0,2,0},6);
     for(i=0;i<3;i++) event();
@@ -82,7 +82,7 @@ int main(void)
     static const uint8_t pub[6]={0x58,0x65,0x67,0x8b,0x40,0x62};
     static const uint8_t uuid[16]={0x00,0xc7,0xc4,0x4e,0xe3,0x6c,0x51,0xa7,0x33,0x4b,0xe8,0xed,0x5a,0x0e,0xb8,0x03};
     ble_host_diag_t d; uint8_t query[256]; uint16_t start,end,value,cccd; unsigned i,cycle;
-    sim_reset(); ble_init(pub,0); ble_host_start();
+    sim_reset(); sim_executor_enabled=1; ble_init(pub,0); ble_host_start();
     for(i=0;i<5;i++) { ble_host_worker(); sim_advance_us(1000); }
     ble_host_get_diag(&d);
     assert(d.synced && d.running && !d.error && !d.resets && sim_starts==1);
@@ -116,6 +116,9 @@ int main(void)
     query[0]=0x52; ble_put16(query+1,value); memcpy(query+3,(uint8_t[]){0x80,0x80,0x90,69,85},5);
     request(query,8,1); assert(att_n==8 && !memcmp(att+3,query+3,5)); ble_host_echo(0);
     { uint32_t pkt,ts; assert(ble_host_midi_take(&pkt,&ts)); }
+    /* Complete the peripheral L2CAP update before a distinct central update. */
+    for(i=0;i<100 && (!l2cap_updates || ble_link.instant_kind);i++) event();
+    assert(l2cap_updates==1 && !ble_link.instant_kind);
     { uint8_t update[12]={0,2,3,0,12,0,0,0,100,0,0,0};
       ble_put16(update+10,(uint16_t)(peer_event_n+8)); control(update,sizeof update);
       for(i=0;i<10;i++) event();

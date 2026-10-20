@@ -9,6 +9,9 @@
 #define BLE_BB_SIZE 3352u
 #define BLE_TRACE_N 512u
 #define BLE_HCI_MAX 254u
+#ifndef FELUCCA_BLE_STAGE
+#define FELUCCA_BLE_STAGE 2
+#endif
 #ifndef FELUCCA_BLE_TX_DBM
 #define FELUCCA_BLE_TX_DBM 127 /* unknown; command 2007 is then unsupported */
 #endif
@@ -56,6 +59,8 @@ typedef struct {
     uint32_t event_work_max_ticks, event_over_150us, critical_max_ticks, critical_over_390us;
     uint32_t worker_gap_ticks, stop_timeouts, restarts, enable_ticks, first_event_ticks;
     uint32_t worker_timer_calls, worker_timer_last_ticks, worker_timer_gap_ticks, worker_timer_over_gap;
+    uint32_t executor_selftest,executor_dispatch_ticks,executor_pass_ticks,executor_over_budget,executor_starvation;
+    uint32_t refill_max_ticks,refill_over_60us;
     uint32_t dma_base, dma_end, modem_base, canary_errors;
     uint8_t p33_before[38], p33_after[38], vco[48];
 } ble_hw_diag_t;
@@ -103,6 +108,7 @@ void ble_port_stop_begin(void);
 int ble_port_stop_poll(void);
 void ble_port_reset_stats(void);
 int ble_port_failed(void);
+void ble_port_pend(void);
 
 /* Host takes copies during callback; type passed separately, no H4 octet in packet. */
 void ble_init(const uint8_t *public_addr, ble_host_fn host);
