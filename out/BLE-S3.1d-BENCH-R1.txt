@@ -1,0 +1,27 @@
+BLE S3.1 round 4 (connection-update fix, spec r7) bench - 2026-10-21 02:05-02:15
+Image: out/felucca-ble-s3.1d.fwsc sha256 50b9b698f1ec94af1ff867e18e7c643aabdb51aa145e08fc6586e7711e238a16
+(flashed over S3.1c, CRC verified; backup ~/backups/fm1-20261021-020355.bin).
+Central: desktop BlueZ, raw HCI LE Connection Update via tools/ble_conn_update_bench.py (sudo),
+btmon capture. Encrypted SC bond. Data: out/s31d-owner/ (measurements.json, capture.btsnoop,
+first and last console dumps; 45 console dumps on the desktop).
+
+RESULT: PASS (F-12 central-initiated updates; the 89.478-s first-window-gate bug is gone).
+
+Boot: seed CHAINED seq 13; 7 bond records; rl_entries 2; executor_selftest 1; error 0.
+Wall-clock interval from console event counters (10 s windows), every event serviced:
+  initial 15 ms              15.003 ms  671/671
+  after a 200 s hold          15.013 ms  671/671   (crosses the old 89.5 s and 179 s boundaries)
+  15 -> 7.5 ms                7.503 ms  1342/1342   desktop Update Complete 00
+  7.5 -> 15 ms               15.007 ms  671/671    Update Complete 00
+  15 -> 30 ms                29.973 ms  336/336    Update Complete 00
+  30 -> 15 ms                15.014 ms  671/671    Update Complete 00
+  after disconnect/reconnect 15.004 ms  671/671    new epoch, clean timing
+Final counters: conn_updates 7, late_instants 0, supervision_fail 0, control_ignored 0,
+  pending_proc empty, enc_enabled 1, mic_failures 0, ltk_negative 0, last disconnect 0x13 (bench).
+Timing: W_item max 63 us, over_100 0; own_over_250 0; dispatch negatives 0; refill over_80 0.
+
+Root cause (implementer analysis, out/BLE-S3.1d-CONNUPDATE-ANALYSIS.md): a signed 24 MHz tick comparison
+against the link's original first-window time suppressed event-close processing in alternate 89.478 s
+halves of every link; instant procedures fired only on the exact I-1 close and could stay pending
+forever. Both fixed; the earlier S3.x 10-minute runs passed only because packets kept flowing.
+NOT RUN: MIDI traffic during the update steps (link idle apart from console), a phone-side check.

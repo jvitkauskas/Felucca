@@ -1,0 +1,65 @@
+[
+  {
+    "label": "initial 15 ms",
+    "seconds": 10.067202994499894,
+    "event_delta": 671,
+    "serviced_delta": 671,
+    "measured_ms": 15.003283151266608,
+    "expected_ms": 15.0,
+    "epoch": 4
+  },
+  {
+    "label": "15 ms after soak",
+    "seconds": 10.07398500850013,
+    "event_delta": 671,
+    "serviced_delta": 671,
+    "measured_ms": 15.013390474664874,
+    "expected_ms": 15.0,
+    "epoch": 4
+  },
+  {
+    "label": "15->7.5 ms",
+    "seconds": 10.06915867150019,
+    "event_delta": 1342,
+    "serviced_delta": 1342,
+    "measured_ms": 7.503098861028458,
+    "expected_ms": 7.5,
+    "epoch": 4
+  },
+  {
+    "label": "7.5->15 ms",
+    "seconds": 10.069755718999659,
+    "event_delta": 671,
+    "serviced_delta": 671,
+    "measured_ms": 15.007087509686526,
+    "expected_ms": 15.0,
+    "epoch": 4
+  },
+  {
+    "label": "15->30 ms",
+    "seconds": 10.070885791500132,
+    "event_delta": 336,
+    "serviced_delta": 336,
+    "measured_ms": 29.972874379464677,
+    "expected_ms": 30.0,
+    "epoch": 4
+  },
+  {
+    "label": "30->15 ms",
+    "seconds": 10.07448110300038,
+    "event_delta": 671,
+    "serviced_delta": 671,
+    "measured_ms": 15.01412981073082,
+    "expected_ms": 15.0,
+    "epoch": 4
+  },
+  {
+    "label": "15 ms after disconnect/reconnect",
+    "seconds": 10.06786253600012,
+    "event_delta": 671,
+    "serviced_delta": 671,
+    "measured_ms": 15.004266074515828,
+    "expected_ms": 15.0,
+    "epoch": 6
+  }
+]

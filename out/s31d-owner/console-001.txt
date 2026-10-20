@@ -1,0 +1,258 @@
+monotonic_start 3463.017888573
+monotonic_end 3463.088063026
+ble
+BLE S3.1 / NimBLE 1.9.0 / MIDI; SC Just Works + legacy
+enc_phase_N_S1_S2_PA_PB_PC 0
+enc_rx_on 1
+enc_tx_on 1
+enc_enabled 1
+enc_starts 2
+enc_refreshes 0
+mic_failures 0
+enc_phase_errors 0
+ltk_requests 2
+ltk_negative 0
+enc_tx_counter_hi 0
+enc_tx_counter_lo 0x0000000B
+enc_rx_counter_hi 0
+enc_rx_counter_lo 0x0000000B
+seed_FAILED_FIRST_CHAINED_PROVISIONED_UNPERSISTED 2
+seed_origin 2
+seed_STORED_NOT_STORED_UNVERIFIED 0
+seed_sequence 0x0000000D
+seed_credit_bits 0
+seed_malformed 0
+seed_conflicts 0
+seed_flash_failures 0
+le_rand_calls 0
+entropy_bytes 24
+reseed_attempts 2
+bond_records 8
+bond_pending 1
+bond_writes 0
+bond_erases 0
+bond_failures 0
+bond_malformed 0
+bond_private_refused 0
+bond_private_dropped 0
+bond_orphan_dropped 0
+bond_equal_writes_skipped 0
+rl_capacity 4
+rl_entries 2
+rl_enabled 1
+rl_attempts 0
+rl_matches 0
+rl_unresolved 0
+rl_aes_failures 0
+rl_network_rejected 0
+executor_selftest 1
+executor_dispatch_max_us 517
+executor_dispatch_live_max_us 517
+executor_dispatch_negative 0
+executor_wall_max_us 688
+executor_own_max_us 195
+executor_item_max_us 53
+executor_item_over_100us 0
+executor_item_max_kind entropy_sample
+executor_item_max_opcode 0x00000000
+executor_kind service max_ticks 126 count 21026 over100 0 opcode 0000
+executor_kind key max_ticks 781 count 20997 over100 0 opcode 0000
+executor_kind rx max_ticks 1272 count 21011 over100 0 opcode FFFF
+executor_kind control max_ticks 1228 count 12 over100 0 opcode 0000
+executor_kind housekeep max_ticks 1009 count 20997 over100 0 opcode 0000
+executor_kind delivery max_ticks 710 count 20949 over100 0 opcode 0000
+executor_kind resolution max_ticks 223 count 2 over100 0 opcode 0000
+executor_kind driver max_ticks 172 count 20951 over100 0 opcode 0000
+executor_kind command max_ticks 728 count 28 over100 0 opcode 2008
+executor_kind stop max_ticks 147 count 1 over100 0 opcode 0C03
+executor_kind adv_prepare max_ticks 815 count 46 over100 0 opcode 200A
+executor_kind entropy_sample max_ticks 1295 count 20997 over100 0 opcode 0000
+executor_kind entropy_reseed max_ticks 621 count 4 over100 0 opcode 0000
+executor_kind entropy_output max_ticks 683 count 2 over100 0 opcode 0000
+executor_kind entropy_rekey max_ticks 529 count 4 over100 0 opcode 0000
+executor_kind control_rx max_ticks 1169 count 12 over100 0 opcode 0002
+executor_kind refill max_ticks 373 count 12 over100 0 opcode 0008
+executor_kind reset_clear max_ticks 163 count 28 over100 0 opcode 0C03
+executor_kind reset_defaults max_ticks 226 count 1 over100 0 opcode 0C03
+executor_kind reset_stats max_ticks 401 count 1 over100 0 opcode 0C03
+executor_kind reset_complete max_ticks 256 count 1 over100 0 opcode 0C03
+executor_own_over_250us 0
+executor_over_250us_plus_item 0
+refill_max_us 55
+refill_ccm_max_us 29
+refill_other_max_us 33
+refill_over_80us 0
+worker_timer_calls 21026
+worker_timer_max_gap_us 1631
+worker_timer_over_7500us 0
+worker_timer_last_ticks 0x1E79F8F3
+worker_timer_con 0x00000019
+worker_timer_cnt 2194
+worker_timer_prd 6000
+worker_timer_irqcfg 0x00000005
+ble_breadcrumb 0x3004002C
+ble_breadcrumb_ticks 0x1E79F950
+ble_fault_breadcrumb 0x00000000
+ble_fault_ticks 0x00000000
+ble_fault_crash_count 0
+link_state_idle_created_up_closing_stopped 2
+link_epoch 4
+link_established 1
+conn_interval_1250us 12
+conn_latency 0
+conn_timeout_10ms 400
+conn_event 45
+connections 2
+connect_invalid 0
+conn_events 573
+rx_A_new 569
+rx_B_crc_5_13 0
+rx_C_repeat_9 1
+rx_D_unknown 0
+retransmission_rx 1
+rx_delayed_stamp 0
+rx_backpressure 0
+rx_queued 0
+rx_peak 2
+tx_queued_loaded 0
+establishment_fail 0
+supervision_fail 0
+disconnects 1
+last_disconnect_reason 0x00000013
+conn_updates 1
+channel_map_updates 0
+late_instants 0
+pending_proc kind 0 instant 0 received 0 programmed 0 interval 0 latency 0 timeout 0 win 0 offset 0 map 00 00 00 00 00
+control_last_ignored opcode 0 reason 0 event 0
+control_ignore_length 0
+control_ignore_params 0
+control_ignore_map 0
+control_ignore_pending 0
+control_ignore_role 0
+control_ignore_unexpected 0
+control_ignore_version 0
+control_ignore_reserved 0
+control_ignore_encrypted 0
+conn_update serial 1 epoch 2 old 12 new 12 win 1 offset 0 instant 76 received 69 outcome 3 reason 0
+conn_update serial 0 epoch 0 old 0 new 0 win 0 offset 0 instant 0 received 0 outcome 0 reason 0
+conn_update serial 0 epoch 0 old 0 new 0 win 0 offset 0 instant 0 received 0 outcome 0 reason 0
+conn_update serial 0 epoch 0 old 0 new 0 win 0 offset 0 instant 0 received 0 outcome 0 reason 0
+acl_tx_accepted 22
+acl_tx_rejected 0
+acl_rx 22
+acl_acked 22
+ncp_credits 22
+acl_flushed 0
+control_dropped 0
+control_ignored 0
+worker_max_gap_us 1622
+worker_max_us 576
+worker_over_7500us 0
+worker_calls 8803
+terminate_timeouts 0
+nimble_running 1
+nimble_synced 1
+nimble_syncs 1
+nimble_resets 0
+nimble_error 0
+nimble_assertions 0
+nimble_event_drop 0
+nimble_acl_drop 0
+nimble_encrypted 1
+nimble_bonded 1
+nimble_key_size 16
+nimble_pair_method_legacy1_SC2 2
+security_requests 0
+nimble_bond_sc 1
+nimble_bond_identity_known 1
+nimble_peer_identity_type 0
+nimble_peer_identity 40 77 9C B8 BF E8
+security_skipped 2
+security_already 0
+pair_failures 0
+pair_last_status 0
+nimble_main_gap_ms 43
+nimble_mtu 200
+midi_echo 0
+nimble_subscribed 1
+nimble_heap_used 384
+nimble_heap_peak 396
+nimble_heap_fail 0
+midi_packets_in 0
+midi_packets_out 0
+midi_bad 0
+midi_drop 0
+frozen 0
+loop_iters_per_us_x1000 44999
+loop_ticks 53334
+clock 0 000001C1
+clock 1 00010400
+clock 2 00000006
+clock 3 00010200
+icfg_probe 030B0600 030B0600 030B0600 043F0700
+ticks_while_irq_masked 0
+error 0
+failure_stage 0
+calibration_1_record_2_self 1
+vm_status 1
+btif_status 1
+records_present 0x0000001F
+public_address_hci 6C DF C0 52 60 FD
+configured_random_hci 00 00 00 00 00 00
+trim_crc 0x0000AC73
+bringup_us 66558
+bringup_end_ticks 0x00F1C0A1
+first_hci_command_ticks 0x00F28336
+step_us 1 59
+step_us 2 6
+step_us 3 4684
+step_us 4 16
+step_us 5 50614
+step_us 6 114
+step_us 7 7
+step_us 8 34
+step_us 9 11
+step_us 10 4583
+step_us 11 5309
+step_us 12 807
+step_us 13 53
+step_us 14 46
+step_us 15 86
+enabled 0
+stopping 0
+driver_step 0
+driver_error 0
+commands 30
+replies 31
+last_opcode 0x0000201A
+last_status 0x00000000
+intake_rejected 0
+command_overflow 0
+advertising_events 114
+event_irqs 688
+rx_irqs 625
+scan_req 54
+connect_ignored 0
+bad_rx 0
+rx_max_ticks 2532
+event_max_ticks 1188
+rx_over_380us 0
+event_work_max_ticks 1091
+event_work_over_150us 0
+ble_critical_max_ticks 6036
+ble_critical_over_390us 0
+main_controller_gap_us 1626
+stop_timeouts 0
+restarts 0
+enable_ticks 0x1D31B584
+first_event_close_ticks 0x1D32FBD3
+dma_base 0x01C6FD10
+dma_end 0x01C70A28
+modem_base 0x01C70A28
+dma_canary_errors 0
+p33_timeouts 0
+trace_records 138
+trace_total 138
+trace_frozen_drops 0
+vco_limits 47 47 47 47 47 47 4B 50 57 5E 66 6D 74 7B 82 8A 8E 85 85 85 85 85 85 85 89 90 97 9F A5 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 3F
+> 
