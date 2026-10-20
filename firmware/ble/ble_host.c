@@ -19,6 +19,14 @@
 #include "host/ble_sm.h"
 #include "ble_bonds.h"
 #include "ble_seed.h"
+#include "ble_security.h"
+#include "ble_crypto.h"
+#if FELUCCA_BLE_S31
+#include "tinycrypt/sha256.h"
+extern void ble_hs_pvcy_reset(void); /* pinned host cache, reset at each startup */
+#endif
+/* Pinned NimBLE internal query; profile has exactly one connection. */
+extern int ble_sm_num_procs(void);
 static uint32_t security_at;
 static uint8_t security_due,bond_flush_due=1;
 extern void ble_sm_alg_ecc_init(void); /* NimBLE's normally generated sysinit hook */
@@ -79,7 +87,7 @@ static int gap_event(struct ble_gap_event *event,void *arg)
         if(!event->connect.status) { diag.connection=event->connect.conn_handle; diag.mtu=23; update_due=1; update_at=ble_port_ms()+1000u; }
         else { advertise_pending=1; restart_at=ble_port_ms()+100u; }
 #if FELUCCA_BLE_STAGE >= 3
-        if(!event->connect.status) { security_due=1; security_at=ble_port_ms()+100u; }
+        if(!event->connect.status) { security_due=1; security_at=ble_port_ms()+100u; diag.pair_method=diag.sc=0; }
 #endif
         break;
     case BLE_GAP_EVENT_DISCONNECT:
@@ -95,14 +103,12 @@ static int gap_event(struct ble_gap_event *event,void *arg)
     case BLE_GAP_EVENT_MTU: diag.mtu=event->mtu.value; break;
 #if FELUCCA_BLE_STAGE >= 3
     case BLE_GAP_EVENT_ENC_CHANGE: {
-        struct ble_gap_conn_desc desc; union ble_store_key key; union ble_store_value value;
+        struct ble_gap_conn_desc desc;
         if(event->enc_change.status) diag.pair_failures++;
         diag.pair_status=(uint32_t)event->enc_change.status;
         if(!ble_gap_conn_find(event->enc_change.conn_handle,&desc)) {
             diag.encrypted=desc.sec_state.encrypted; diag.bonded=desc.sec_state.bonded;
             diag.key_size=desc.sec_state.key_size;
-            memset(&key,0,sizeof key); key.sec.peer_addr=desc.peer_id_addr;
-            if(!ble_bonds_read(1,&key,&value)) diag.pair_method=value.sec.sc ? 2 : 1;
         }
         break;
     }
@@ -136,8 +142,29 @@ static int gen_key(uint8_t key,struct ble_store_gen_key *out,uint16_t conn)
 {
     (void)conn;
     if(key!=BLE_STORE_GEN_KEY_IRK) return BLE_HS_ENOTSUP;
-    memset(out,0,sizeof *out); return 0;
+    memset(out,0,sizeof *out);
+#if FELUCCA_BLE_S31
+    {
+        uint8_t address[6];
+        if(ble_hs_id_copy_addr(BLE_ADDR_PUBLIC,address,0)) return BLE_HS_ENOADDR;
+        ble_host_local_irk(address,out->irk);
+        /* NimBLE preserves its IRK cache on an HCI error/reset. Without this,
+         * set_our_irk skips 202D/2029 after Reset cleared controller state. */
+        ble_hs_pvcy_reset();
+    }
+#endif
+    return 0;
 }
+#if FELUCCA_BLE_S31
+void ble_host_local_irk(const uint8_t address[6],uint8_t irk[16])
+{
+    static const uint8_t domain[]="Felucca S3.1 public identity IRK v1";
+    struct tc_sha256_state_struct s; uint8_t digest[32];
+    tc_sha256_init(&s); tc_sha256_update(&s,domain,sizeof domain-1u);
+    tc_sha256_update(&s,address,6); tc_sha256_final(digest,&s);
+    memcpy(irk,digest,16); irk[0]|=1; ble_secure_zero(digest,sizeof digest);
+}
+#endif
 static void receive_main(uint8_t type,const uint8_t *packet,uint16_t n)
 {
     if(type==4) {
@@ -228,8 +255,14 @@ void ble_host_worker(void)
         ble_bonds_flush(); bond_flush_due=0;
     }
     if(security_due && (int32_t)(now-security_at)>=0 && diag.connection!=BLE_HS_CONN_HANDLE_NONE) {
-        int rc=ble_gap_security_initiate(diag.connection);
-        security_due=0; diag.security_requests++; if(rc) diag.error=(uint32_t)rc;
+        struct ble_gap_conn_desc desc; ble_security_diag_t enc; int rc;
+        security_due=0; ble_security_get_diag(&enc);
+        if(!ble_gap_conn_find(diag.connection,&desc) && !desc.sec_state.encrypted &&
+            !ble_sm_num_procs() && enc.phase==BLE_ENC_N) {
+            rc=ble_gap_security_initiate(diag.connection); diag.security_requests++;
+            if(rc==BLE_HS_EALREADY) diag.security_already++;
+            else if(rc) diag.error=(uint32_t)rc;
+        } else diag.security_skipped++;
     }
 #endif
     if(diag.synced && advertise_pending && (int32_t)(now-restart_at)>=0) advertise();
@@ -275,8 +308,19 @@ void ble_host_get_diag(ble_host_diag_t *out)
 {
     uint32_t heap[3]; ble_heap_diag(heap); *out=diag;
 #if FELUCCA_BLE_STAGE >= 3
-    /* NimBLE delivers ENC_CHANGE before it invokes its store callbacks. */
-    if(out->encrypted && !out->pair_method) { ble_bond_diag_t bond; ble_bonds_get_diag(&bond); out->pair_method=bond.method; }
+    /* ENC_CHANGE precedes persistence. Query afresh, never another peer's
+     * last write; unknown/unbonded links explicitly report method zero. */
+    {
+        struct ble_gap_conn_desc desc; union ble_store_key key; union ble_store_value value;
+        out->pair_method=out->sc=out->identity_known=0;
+        if(diag.connection!=BLE_HS_CONN_HANDLE_NONE && !ble_gap_conn_find(diag.connection,&desc)) {
+            out->peer_identity_type=desc.peer_id_addr.type; memcpy(out->peer_identity,desc.peer_id_addr.val,6);
+            memset(&key,0,sizeof key); key.sec.peer_addr=desc.peer_id_addr;
+            if(!ble_bonds_read(1,&key,&value)) {
+                out->pair_method=value.sec.sc ? 2 : 1; out->sc=value.sec.sc; out->identity_known=1;
+            }
+        }
+    }
 #endif
     out->heap_used=heap[0]; out->heap_peak=heap[1]; out->heap_fail=heap[2];
 }

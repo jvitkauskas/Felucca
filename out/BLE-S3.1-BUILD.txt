@@ -1,0 +1,12 @@
+Felucca BLE s3.1 — uncommitted above 85cd513; r5
+Package: felucca-ble-s3.1.fwsc; 609849 B
+SHA256: 317a0d96e791bac9dc7826d50e68584b81467732fea3ad2b5e24336c9867237d
+App: 524100 / 581564 B; free 57464 B
+App SHA256: e621bdf2dff880093650ea616cf4b5083d70112dbfd5db80b9055e7612e2ac01
+Static RAM allocation incl. alignment: 96448 / 98304 B; free 1856 B
+Pool incl. DMA: 330804 / 344064 B; free 13260 B
+DMA: 4340 B at 0x01c6fb40
+Trace: 20480 B at 0x01c00b94
+RAM text: 2964 B
+User / supervisor stacks: 24320 / 7936 B, physical high water unmeasured
+No device, USB, device-network, flashing, commit or push operation.

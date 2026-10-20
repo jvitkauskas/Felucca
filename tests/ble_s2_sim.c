@@ -7,6 +7,7 @@ uint8_t sim_air[2][31],sim_air_len[2];
 #endif
 uint32_t sim_ticks,sim_starts,sim_stops,sim_windows,sim_applies;
 int sim_executor_enabled;
+void (*sim_lock_hook)(void);
 int sim_stop_result=1,sim_slot[2]={-1,-1},sim_latency_enabled;
 ble_adv_t sim_advertising;
 static int refilling;
@@ -26,7 +27,11 @@ void ble_port_stop_begin(void) { sim_stops++; }
 int ble_port_stop_poll(void) { return sim_stop_result; }
 int ble_port_failed(void) { return sim_stop_result<0; }
 void ble_port_reset_stats(void) { }
-uint32_t ble_port_lock(void) { return 0; }
+uint32_t ble_port_lock(void)
+{
+    if(sim_lock_hook) { void (*hook)(void)=sim_lock_hook; sim_lock_hook=0; hook(); }
+    return 0;
+}
 void ble_port_unlock(uint32_t key) { (void)key; }
 void ble_port_refill(void)
 {
@@ -65,7 +70,7 @@ void sim_ack(unsigned slot)
 void sim_reset(void)
 {
     sim_ticks=24000; clock_last=sim_ticks; clock_ms=1; clock_fraction=0; sim_starts=sim_stops=sim_windows=sim_applies=0;
-    sim_stop_result=1; sim_latency_enabled=0; sim_slot[0]=sim_slot[1]=-1; refilling=0; ble_ll_init();
+    sim_stop_result=1; sim_latency_enabled=0; sim_slot[0]=sim_slot[1]=-1; refilling=0; sim_lock_hook=0; ble_ll_init();
 }
 ble_conn_t sim_connection(void)
 {

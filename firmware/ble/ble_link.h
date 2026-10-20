@@ -53,6 +53,9 @@ extern struct ble_link {
     uint8_t created_pending,disconn_pending,feature_pending,features_known,version_sent;
     uint8_t features[8],features_ready,features_status,update_pending,peer_version[5],version_known;
     uint16_t completed;
+#if FELUCCA_BLE_S31
+    uint8_t peer_identity[6],peer_identity_type,peer_resolved,resolve_index,resolve_done;
+#endif
 } ble_link;
 enum { BLE_LINK_IDLE, BLE_LINK_CREATED, BLE_LINK_UP, BLE_LINK_CLOSING, BLE_LINK_STOPPED };
 uint8_t ble_map_count(const uint8_t map[5]);
@@ -70,7 +73,7 @@ uint8_t ble_timeline_rx_delayed(ble_timeline_t *t,uint8_t cls,uint32_t stamp,uin
 int ble_missed_step(int fine,uint32_t raw,unsigned phase,int *next,unsigned *drift);
 void ble_ll_init(void);
 void ble_ll_reset(void);
-void ble_ll_create(const ble_conn_t *c,uint32_t now);
+int ble_ll_create(const ble_conn_t *c,uint32_t now);
 int ble_ll_rx_room(void);
 int ble_ll_rx_marker(uint8_t marker);
 int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,int delayed);

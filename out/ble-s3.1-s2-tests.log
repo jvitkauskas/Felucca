@@ -1,0 +1,3 @@
+BLE S2 frame alignment, breadcrumbs, logic, HCI, lifecycle, credits, and MIDI tests: PASS
+NimBLE 1.9.0 integration: startup, GATT discovery/empty read/CCCD, bidirectional MIDI, fragmented ACL, update, 10-minute simulated link, 10 reconnects, backstop timeout: PASS
+heap peak 784; HCI credits 5; MIDI packets in 3 out 2; controller control PDUs 22

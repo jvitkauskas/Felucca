@@ -4,10 +4,14 @@
 #include "ble_s1.h"
 #include "ble_link.h"
 #include "ble_memory.h"
+#include "ble_timing.h"
 #if FELUCCA_BLE_STAGE >= 3
 #include "ble_security.h"
 #include "ble_seed.h"
 #include "ble_crypto.h"
+#if FELUCCA_BLE_S31
+#include "ble_privacy.h"
+#endif
 #endif
 
 typedef struct { uint8_t data[BLE_HCI_MAX], cancel; uint16_t n; } command_t;
@@ -39,6 +43,7 @@ static void trace_add(uint8_t type,const uint8_t *p,uint16_t n,uint8_t status)
     /* Console traces retain framing/counters, never SMP keys or Rand output. */
     if((type==129 && n>=3 && (ble_get16(p)==0x201a || ble_get16(p)==0x2017)))
         memset(r->data+3,0,29);
+    if(type==129 && n>=10 && ble_get16(p)==0x2027) memset(r->data+10,0,22);
     if((type==2 || type==130) && n>=4) memset(r->data+4,0,28);
     if(type==4 && n>=6 && p[0]==14 && (ble_get16(p+3)==0x2017 || ble_get16(p+3)==0x2018))
         memset(r->data+6,0,26);
@@ -76,6 +81,9 @@ static void defaults(void)
     memset(ctl.masks[0],255,5); ctl.masks[0][5]=31;
     ctl.masks[1][0]=31;
     ctl.diag.enabled=0; ctl.diag.stopping=0;
+#if FELUCCA_BLE_S31
+    ble_privacy_reset();
+#endif
 }
 void ble_init(const uint8_t *public_addr,ble_host_fn host)
 {
@@ -124,6 +132,13 @@ static int command_length(uint16_t op)
     case 0x201b: return 2;
     case 0x201a: return 18;
     case 0x2017: return 32;
+#if FELUCCA_BLE_S31
+    case 0x2027: return 39;
+    case 0x2028: return 7;
+    case 0x204e: return 8;
+    case 0x2029: case 0x202a: return 0;
+    case 0x202d: return 1;
+#endif
 #endif
     case 0x2016: return 2;
     case 0x0406: return 3;
@@ -145,6 +160,9 @@ static void supported(uint8_t *out)
     out[0]=0x20; out[25]=0xb7; out[26]=3; out[27]=0x20; out[28]=0x08;
 #if FELUCCA_BLE_STAGE >= 3
     out[27]|=0xc0; out[28]|=0x06;
+#if FELUCCA_BLE_S31
+    out[34]=0x78; out[35]=2; out[39]=4;
+#endif
 #endif
 #if FELUCCA_BLE_TX_DBM != 127
     out[25]|=64;
@@ -200,6 +218,13 @@ static void execute(const command_t *cmd)
 #if FELUCCA_BLE_STAGE >= 3
     case 0x2017: if(!ble_aes_le(p,p+16,data)) status=3; else n=16; break;
     case 0x2018: ble_seed_rand_called(); if(!ble_entropy(data,8)) status=3; else n=8; break;
+#if FELUCCA_BLE_S31
+    case 0x202a: data[0]=BLE_RL_CAPACITY; n=1; break;
+    case 0x2027: case 0x2028: case 0x2029: case 0x202d: case 0x204e: {
+        uint32_t k=ble_port_lock(); status=ble_privacy_command(op,p,ctl.diag.enabled);
+        ble_port_unlock(k); break;
+    }
+#endif
 #else
     case 0x2018: status=3; break;
 #endif /* S2 entropy service disabled, no fabricated randomness */
@@ -296,10 +321,17 @@ static void driver_pass(void)
 }
 static void link_deliver(void)
 {
-    uint8_t b[32],type; uint16_t n; unsigned limit=1; uint32_t start=ble_port_ticks();
-    while(limit-- && (uint32_t)(ble_port_ticks()-start)<150u*24u && ble_ll_poll(&type,b,&n)) {
+    uint8_t b[40],type; uint16_t n; unsigned limit=1; uint32_t start=ble_time_own();
+    while(limit-- && (uint32_t)(ble_time_own()-start)<150u*24u && ble_ll_poll(&type,b,&n)) {
         int deliver=1;
         if(type==4 && b[0]==0x3e && b[2]==1) ctl.diag.enabled=0;
+#if FELUCCA_BLE_S31
+        if(type==4 && b[0]==0x3e && b[2]==1 && (ctl.masks[1][1]&2u)) {
+            memcpy(b+26,b+14,7); memset(b+14,0,12);
+            if(ble_link.peer_resolved) { b[7]+=2; memcpy(b+20,ble_link.conn.peer,6); }
+            b[1]=31; b[2]=10; n=33;
+        }
+#endif
         if(type==4 && b[0]!=0x13) {
             unsigned bit=b[0]-1u;
             deliver=(ctl.masks[0][bit/8]>>(bit%8))&1u;
@@ -313,26 +345,33 @@ static void link_deliver(void)
 }
 void ble_worker(void)
 {
+    uint32_t item;
+    if(!ble_time_budget()) { ble_port_pend(); return; }
     if (ctl.deferred) {
-        int rc=ble_port_stop_poll();
+        int rc; item=ble_time_item_begin(); rc=ble_port_stop_poll();
         uint16_t op;
-        if (!rc) return;
+        if (!rc) { ble_time_item_end(item); return; }
         op=ctl.deferred; ctl.deferred=0; ctl.diag.stopping=0; ctl.diag.enabled=0;
         if (op==0x0c03 && rc>0) reset_finish();
         complete(op,rc<0 ? 3 : 0,0,0,0);
+        ble_time_item_end(item);
         return;
     }
     if(ctl.overflow_count) {
+        item=ble_time_item_begin();
         uint32_t key=ble_port_lock(); uint16_t op=ctl.overflow_op[ctl.overflow_r++%128u];
         ctl.overflow_count--; ble_port_unlock(key); complete(op,0x0c,0,0,1);
+        ble_time_item_end(item);
     }
-    link_deliver();
-    driver_pass();
-    if (ctl.count) {
+    if(ble_time_budget()) { item=ble_time_item_begin(); link_deliver(); ble_time_item_end(item); }
+    if(ble_time_budget()) { item=ble_time_item_begin(); driver_pass(); ble_time_item_end(item); }
+    if (ctl.count && ble_time_budget()) {
+        item=ble_time_item_begin();
         uint32_t key=ble_port_lock();
         command_t cmd=ctl.q[ctl.r];
         ctl.r=(ctl.r+1u)%4; ctl.count--; ble_port_unlock(key);
         execute(&cmd);
+        ble_time_item_end(item);
     }
     if(ctl.count || ctl.overflow_count || ctl.deferred || ble_ll_pending()) ble_port_pend();
 }

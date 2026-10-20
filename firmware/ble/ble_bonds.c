@@ -11,9 +11,25 @@
 #define BOND_BASE 0x96000u
 #define BOND_COUNT 8
 static struct {
-    struct { uint8_t type,active,dirty,p[80]; } entry[BOND_COUNT];
+    struct { uint8_t type,active,dirty,saved_type,saved_active,p[80],saved[80]; } entry[BOND_COUNT];
     ble_bond_diag_t d; uint32_t sequence; uint8_t next;
 } bonds __attribute__((section(".pool.ble")));
+static int identity(ble_addr_t *a)
+{
+    if(a->type>3) return 0;
+    a->type&=1u;
+    return a->type==0 || ble_random_valid(a->val);
+}
+static void reconcile(void)
+{
+    unsigned i; bonds.d.pending=0;
+    for(i=0;i<BOND_COUNT;i++) {
+        bonds.entry[i].dirty=bonds.entry[i].active!=bonds.entry[i].saved_active ||
+            (bonds.entry[i].active && (bonds.entry[i].type!=bonds.entry[i].saved_type ||
+                memcmp(bonds.entry[i].p,bonds.entry[i].saved,80)));
+        bonds.d.pending|=bonds.entry[i].dirty;
+    }
+}
 static int record_valid(const uint8_t *p)
 {
     unsigned i;
@@ -36,13 +52,21 @@ void ble_bonds_init(void)
         i=record[6]; bonds.entry[i].type=record[5]; bonds.entry[i].active=record[7];
         memcpy(bonds.entry[i].p,record+12,80); bonds.sequence=ble_get32(record+8);
     }
+    for(i=0;i<BOND_COUNT;i++) {
+        ble_addr_t a;
+        bonds.entry[i].saved_type=bonds.entry[i].type; bonds.entry[i].saved_active=bonds.entry[i].active;
+        memcpy(bonds.entry[i].saved,bonds.entry[i].p,80);
+        a.type=bonds.entry[i].p[0]; memcpy(a.val,bonds.entry[i].p+1,6);
+        if(bonds.entry[i].active && !identity(&a)) { bonds.entry[i].active=0; bonds.d.private_dropped++; }
+    }
+    reconcile();
 }
 static int match(int type,const union ble_store_key *key,unsigned i)
 {
     const uint8_t *p=bonds.entry[i].p; const ble_addr_t *addr;
     if(!bonds.entry[i].active || bonds.entry[i].type!=type) return 0;
     addr=type==3 ? &key->cccd.peer_addr : &key->sec.peer_addr;
-    if(ble_addr_cmp(addr,BLE_ADDR_ANY) && (addr->type!=p[0] || memcmp(addr->val,p+1,6))) return 0;
+    if(ble_addr_cmp(addr,BLE_ADDR_ANY) && ((addr->type&~2u)!=p[0] || memcmp(addr->val,p+1,6))) return 0;
     return type!=3 || !key->cccd.chr_val_handle || key->cccd.chr_val_handle==ble_get16(p+8);
 }
 static int find(int type,const union ble_store_key *key)
@@ -85,25 +109,34 @@ int ble_bonds_write(int type,const union ble_store_value *value)
         memcpy(p+18,value->sec.ltk,16); memcpy(p+34,value->sec.irk,16); memcpy(p+50,value->sec.csrk,16);
         p[66]=(uint8_t)(value->sec.ltk_present | value->sec.irk_present<<1 | value->sec.csrk_present<<2 |
             value->sec.authenticated<<3 | value->sec.sc<<4);
-        bonds.d.method=value->sec.sc ? 2 : 1;
     } else return BLE_HS_ENOTSUP;
+    {
+        ble_addr_t a; a.type=p[0]; memcpy(a.val,p+1,6);
+        if(!identity(&a)) { bonds.d.private_refused++; return BLE_HS_EINVAL; }
+        p[0]=a.type;
+        if(type==3) key.cccd.peer_addr=a; else key.sec.peer_addr=a;
+    }
     found=find(type,&key);
     if(found<0) {
         for(i=0;i<BOND_COUNT;i++) if(bonds.entry[i].active && bonds.entry[i].type==type) count++;
         if(type<3 && count==2) return BLE_HS_ESTORE_CAP;
-        for(i=0;i<BOND_COUNT;i++) if(!bonds.entry[i].active) break;
+        /* A delete followed by recreation of the same key keeps its slot,
+         * even when an earlier unused slot exists. This preserves net state. */
+        for(i=0;i<BOND_COUNT;i++) if(!bonds.entry[i].active && bonds.entry[i].type==type &&
+            !memcmp(bonds.entry[i].p,p,7) && (type!=3 || !memcmp(bonds.entry[i].p+8,p+8,2))) break;
+        if(i==BOND_COUNT) for(i=0;i<BOND_COUNT;i++) if(!bonds.entry[i].active) break;
         if(i==BOND_COUNT) return BLE_HS_ESTORE_CAP;
         found=(int)i;
     }
-    if(bonds.entry[found].active && bonds.entry[found].type==type && !memcmp(bonds.entry[found].p,p,80)) return 0;
+    if(bonds.entry[found].active && bonds.entry[found].type==type && !memcmp(bonds.entry[found].p,p,80)) { bonds.d.net_noops++; return 0; }
     bonds.entry[found].type=(uint8_t)type; bonds.entry[found].active=1; bonds.entry[found].dirty=1;
-    memcpy(bonds.entry[found].p,p,80); bonds.d.pending=1; return 0;
+    memcpy(bonds.entry[found].p,p,80); reconcile(); return 0;
 }
 int ble_bonds_delete(int type,const union ble_store_key *key)
 {
     int i=find(type,key);
     if(i<0) return BLE_HS_ENOENT;
-    bonds.entry[i].active=0; bonds.entry[i].dirty=1; bonds.d.pending=1; return 0;
+    bonds.entry[i].active=0; reconcile(); return 0;
 }
 void ble_bonds_flush(void)
 {
@@ -111,10 +144,18 @@ void ble_bonds_flush(void)
     if(!bonds.d.pending || !ble_port_storage_idle()) return;
     for(i=0;i<BOND_COUNT;i++) dirty+=bonds.entry[i].dirty;
     if(bonds.next+dirty>30u) {
+        /* A CCCD is meaningful only while that identity has security state. */
+        for(i=0;i<BOND_COUNT;i++) if(bonds.entry[i].active && bonds.entry[i].type==3) {
+            unsigned j;
+            for(j=0;j<BOND_COUNT;j++) if(bonds.entry[j].active && bonds.entry[j].type<3 &&
+                !memcmp(bonds.entry[j].p,bonds.entry[i].p,7)) break;
+            if(j==BOND_COUNT) { bonds.entry[i].active=0; bonds.d.orphan_dropped++; }
+        }
         rc=ble_port_flash_erase(BOND_BASE,&ticks);
         if(rc) { bonds.d.failures++; return; }
         bonds.d.erases++; bonds.next=0;
-        for(i=0;i<BOND_COUNT;i++) bonds.entry[i].dirty=bonds.entry[i].active;
+        for(i=0;i<BOND_COUNT;i++) bonds.entry[i].saved_active=0;
+        reconcile();
     }
     for(i=0;i<BOND_COUNT;i++) if(bonds.entry[i].dirty) {
         memset(record,0,sizeof record); memcpy(record,"FLBD",4); record[4]=1; record[5]=bonds.entry[i].type;
@@ -125,6 +166,8 @@ void ble_bonds_flush(void)
             bonds.d.failures++; return;
         }
         bonds.entry[i].dirty=0; bonds.d.writes++;
+        bonds.entry[i].saved_type=bonds.entry[i].type; bonds.entry[i].saved_active=bonds.entry[i].active;
+        memcpy(bonds.entry[i].saved,bonds.entry[i].p,80);
     }
     bonds.d.pending=0;
 }

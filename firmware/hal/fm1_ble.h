@@ -7,6 +7,10 @@
 #include "fm1_ble_radio.h"
 #include "../ble/ble_link.h"
 #include "../ble/ble_breadcrumb.h"
+#include "../ble/ble_timing.h"
+#if FELUCCA_BLE_S31
+#include "../ble/ble_privacy.h"
+#endif
 #if FELUCCA_BLE_STAGE >= 3
 #include "../ble/ble_security.h"
 #include "../ble/ble_seed.h"
@@ -102,7 +106,7 @@ static void bb_map(const uint8_t *map)
 }
 static void bb_refill(void)
 {
-    uint32_t start=fm1_ticks(),k=fm1_ble_irq_save();
+    uint32_t k=fm1_ble_irq_save(),start=fm1_ticks(),ccm_before=ble_time_ccm_total();
     unsigned a,b,j,first,tries=0;
     if(bb.refill_busy || (bb.state!=4 && bb.state!=2)) { fm1_ble_irq_restore(k); return; }
     bb.refill_busy=1;
@@ -110,7 +114,7 @@ static void bb_refill(void)
         a=(BB_F16(BF_TX_TOGGLE)&1u)|((BB_F8(BF_TX_CTL)&1u)<<1)|((BB_F8(BF_TX_CTL+1)&1u)<<2);
         b=(BB_F16(BF_TX_TOGGLE)&1u)|((BB_F8(BF_TX_CTL)&1u)<<1)|((BB_F8(BF_TX_CTL+1)&1u)<<2);
         if(++tries==4 && a!=b) {
-            bb.refill_busy=0; fm1_ble_irq_restore(k); ble_port_pend(); return;
+            bb.refill_busy=0; ble_time_refill_end(start,ccm_before); fm1_ble_irq_restore(k); ble_port_pend(); return;
         }
     } while(a!=b);
     first=a&1u;
@@ -137,13 +141,12 @@ static void bb_refill(void)
         bb.tx_id[slot]=(int8_t)id; br_sync(); BB_F8(BF_TX_CTL+slot)&=(uint8_t)~1u; br_sync();
     }
     bb.refill_busy=0;
-    { uint32_t elapsed=fm1_ticks()-start;
-      if(elapsed>br_diag.refill_max_ticks) br_diag.refill_max_ticks=elapsed;
-      if(elapsed>60u*24u) br_diag.refill_over_60us++; }
+    ble_time_refill_end(start,ccm_before);
     fm1_ble_irq_restore(k);
 }
 static void bb_connection(const ble_conn_t *c,uint8_t header,uint32_t now)
 {
+    if(!ble_ll_create(c,now)) { br_diag.connect_ignored++; return; }
     bb_mark(BLE_STAGE_CONNECT,c->interval);
     unsigned slot,t=BB_F16(BF_TX_TOGGLE)&1u;
     uint16_t w=ble_widen(c);
@@ -173,7 +176,7 @@ static void bb_connection(const ble_conn_t *c,uint8_t header,uint32_t now)
         BB_F8(BF_RX_CTL+slot)&=(uint8_t)~1u; bb.rx_stamp[slot]=fm1_ticks();
     }
     bb_mark(BLE_STAGE_CREATE,0);
-    ble_ll_create(c,now); bb.state=4; br_sync();
+    bb.state=4; br_sync();
     bb_mark(BLE_STAGE_CONNECTED,0);
 }
 #if FELUCCA_BLE_STAGE >= 3

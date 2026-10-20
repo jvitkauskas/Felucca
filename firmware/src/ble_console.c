@@ -5,6 +5,7 @@
 /* S1 bench interface over Felucca's CDC console. Main context only. */
 static ble_hw_diag_t ble_frozen_hw;
 static ble_diag_t ble_frozen_ctl;
+static ble_timing_diag_t ble_frozen_timing;
 static uint8_t ble_console_frozen;
 
 static void con_ble_bytes(const uint8_t *p,unsigned n)
@@ -24,7 +25,11 @@ static void con_ble_status(void)
         ble_get_diag(&d);
     }
 #if FELUCCA_BLE_STAGE >= 3
+#if FELUCCA_BLE_S31
+    con_puts("BLE S3.1 / NimBLE 1.9.0 / MIDI; SC Just Works + legacy\r\n");
+#else
     con_puts("BLE S3 / NimBLE 1.9.0 / MIDI; SC Just Works + legacy\r\n");
+#endif
     {
         ble_security_diag_t enc; ble_seed_diag_t seed; ble_bond_diag_t bond;
         ble_security_get_diag(&enc); ble_seed_get_diag(&seed); ble_bonds_get_diag(&bond);
@@ -41,23 +46,45 @@ static void con_ble_status(void)
         con_kv("entropy_bytes",(int32_t)seed.bytes); con_kv("reseed_attempts",(int32_t)seed.reseed_attempts);
         con_kv("bond_records",bond.records); con_kv("bond_pending",bond.pending); con_kv("bond_writes",(int32_t)bond.writes);
         con_kv("bond_erases",(int32_t)bond.erases); con_kv("bond_failures",(int32_t)bond.failures); con_kv("bond_malformed",(int32_t)bond.malformed);
-        con_kv("bond_pair_method_legacy1_SC2",bond.method);
+        con_kv("bond_private_refused",(int32_t)bond.private_refused);
+        con_kv("bond_private_dropped",(int32_t)bond.private_dropped);
+        con_kv("bond_orphan_dropped",(int32_t)bond.orphan_dropped);
+        con_kv("bond_equal_writes_skipped",(int32_t)bond.net_noops);
     }
+#if FELUCCA_BLE_S31
+    {
+        ble_privacy_diag_t privacy; ble_privacy_get_diag(&privacy);
+        con_kv("rl_capacity",privacy.capacity); con_kv("rl_entries",privacy.count); con_kv("rl_enabled",privacy.enabled);
+        con_kv("rl_attempts",(int32_t)privacy.attempts); con_kv("rl_matches",(int32_t)privacy.matches);
+        con_kv("rl_unresolved",(int32_t)privacy.unresolved); con_kv("rl_aes_failures",(int32_t)privacy.aes_failures);
+        con_kv("rl_network_rejected",(int32_t)privacy.network_rejected);
+    }
+#endif
 #else
     con_puts("BLE S2.1 / NimBLE 1.9.0 / MIDI; encryption off\r\n");
 #endif
     {
+        ble_timing_diag_t timing;
+        if(ble_console_frozen) timing=ble_frozen_timing; else ble_time_get_diag(&timing);
         ble_breadcrumb_t b; uint32_t timer[8],k=fm1_ble_irq_save();
         b=fm1_ble_breadcrumb; fm1_ble_worker_timer_readback(timer);
         timer[4]=br_diag.worker_timer_calls; timer[5]=br_diag.worker_timer_gap_ticks;
         timer[6]=br_diag.worker_timer_over_gap; timer[7]=br_diag.worker_timer_last_ticks;
         fm1_ble_irq_restore(k);
         con_kv("executor_selftest",(int32_t)hw.executor_selftest);
-        con_kv("executor_dispatch_max_us",(int32_t)(hw.executor_dispatch_ticks/24u));
-        con_kv("executor_pass_max_us",(int32_t)(hw.executor_pass_ticks/24u));
-        con_kv("executor_over_250us",(int32_t)hw.executor_over_budget);
-        con_kv("refill_max_us",(int32_t)(hw.refill_max_ticks/24u));
-        con_kv("refill_over_60us",(int32_t)hw.refill_over_60us);
+        con_kv("executor_dispatch_max_us",(int32_t)(timing.dispatch_max/24u));
+        con_kv("executor_dispatch_live_max_us",(int32_t)(timing.dispatch_live_max/24u));
+        con_kv("executor_dispatch_negative",(int32_t)timing.dispatch_negative);
+        con_kv("executor_wall_max_us",(int32_t)(timing.wall_max/24u));
+        con_kv("executor_own_max_us",(int32_t)(timing.own_max/24u));
+        con_kv("executor_item_max_us",(int32_t)(timing.item_max/24u));
+        con_kv("executor_item_over_100us",(int32_t)timing.item_over_100us);
+        con_kv("executor_own_over_250us",(int32_t)timing.own_over_250us);
+        con_kv("executor_over_250us_plus_item",(int32_t)timing.pass_over_budget);
+        con_kv("refill_max_us",(int32_t)(timing.refill_max/24u));
+        con_kv("refill_ccm_max_us",(int32_t)(timing.refill_ccm_max/24u));
+        con_kv("refill_other_max_us",(int32_t)(timing.refill_other_max/24u));
+        con_kv("refill_over_80us",(int32_t)timing.refill_over_80us);
         con_kv("worker_timer_calls",(int32_t)timer[4]);
         con_kv("worker_timer_max_gap_us",(int32_t)(timer[5]/24u));
         con_kv("worker_timer_over_7500us",(int32_t)timer[6]);
@@ -101,6 +128,9 @@ static void con_ble_status(void)
 #if FELUCCA_BLE_STAGE >= 3
         con_kv("nimble_encrypted",host.encrypted); con_kv("nimble_bonded",host.bonded); con_kv("nimble_key_size",host.key_size);
         con_kv("nimble_pair_method_legacy1_SC2",host.pair_method); con_kv("security_requests",(int32_t)host.security_requests);
+        con_kv("nimble_bond_sc",host.sc); con_kv("nimble_bond_identity_known",host.identity_known);
+        con_kv("nimble_peer_identity_type",host.peer_identity_type); con_puts("nimble_peer_identity "); con_ble_bytes(host.peer_identity,6);
+        con_kv("security_skipped",(int32_t)host.security_skipped); con_kv("security_already",(int32_t)host.security_already);
         con_kv("pair_failures",(int32_t)host.pair_failures);
         con_kv("pair_last_status",(int32_t)host.pair_status);
 #endif
@@ -190,6 +220,7 @@ static void con_ble(const char *p)
     } else if (con_word(&p,"freeze")) {
         uint32_t k=fm1_ble_irq_save();
         ble_trace_freeze(1); ble_get_diag(&ble_frozen_ctl); ble_frozen_hw=br_diag;
+        ble_time_get_diag(&ble_frozen_timing);
         ble_console_frozen=1; fm1_ble_irq_restore(k);
         con_kv("frozen_records",(int32_t)ble_trace_size());
     } else if (con_word(&p,"thaw")) {

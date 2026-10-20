@@ -12,6 +12,12 @@
 #ifndef FELUCCA_BLE_STAGE
 #define FELUCCA_BLE_STAGE 2
 #endif
+#ifndef FELUCCA_BLE_S31
+#define FELUCCA_BLE_S31 0
+#endif
+#if FELUCCA_BLE_S31 && FELUCCA_BLE_STAGE < 3
+#error "S3.1 requires stage 3"
+#endif
 #ifndef FELUCCA_BLE_TX_DBM
 #define FELUCCA_BLE_TX_DBM 127 /* unknown; command 2007 is then unsupported */
 #endif

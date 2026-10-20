@@ -29,26 +29,27 @@ void ble_port_host_idle(void) { fm1_wdt_feed(); }
 void fm1_ble_worker_irq(void)
 {
     static uint32_t chain_start;
-    uint32_t start=fm1_ticks(),key=fm1_ble_irq_save(),gap=start-br_diag.worker_timer_last_ticks;
+    uint32_t key=fm1_ble_irq_save(),start=fm1_ticks(),gap=start-br_diag.worker_timer_last_ticks;
     fm1_ble_worker_timer_ack(); ble_llx_running=1;
     if(ble_llx_pending) {
-        uint32_t dispatch=start-ble_llx_request_ticks;
-        if(dispatch>br_diag.executor_dispatch_ticks) br_diag.executor_dispatch_ticks=dispatch;
+        ble_time_dispatch(ble_llx_request_ticks,start);
     }
     ble_llx_pending=0;
+    ble_llx_request_ticks=0;
     if(br_diag.worker_timer_calls && gap>br_diag.worker_timer_gap_ticks) br_diag.worker_timer_gap_ticks=gap;
     if(br_diag.worker_timer_calls && gap>7500u*24u) br_diag.worker_timer_over_gap++;
     br_diag.worker_timer_calls++; br_diag.worker_timer_last_ticks=start;
+    ble_time_pass_begin(start);
     fm1_ble_irq_restore(key);
     if(!ble_llx_testing) {
         bb_mark_event(BLE_STAGE_WORKER);
-        fm1_ble_service(); ble_ll_worker();
-        if((uint32_t)(fm1_ticks()-start)<125u*24u) ble_worker(); else ble_port_pend();
+        uint32_t item=ble_time_item_begin();
+        fm1_ble_service(); ble_time_item_end(item);
+        if(ble_time_budget()) ble_ll_worker(); else ble_port_pend();
+        if(ble_time_budget()) ble_worker(); else ble_port_pend();
     }
     key=fm1_ble_irq_save();
-    { uint32_t elapsed=fm1_ticks()-start;
-      if(elapsed>br_diag.executor_pass_ticks) br_diag.executor_pass_ticks=elapsed;
-      if(elapsed>250u*24u) br_diag.executor_over_budget++; }
+    ble_time_pass_end();
     ble_llx_running=0;
     if(!ble_llx_testing) {
         uint32_t delay=ble_llx_pending ? 6u : 6000u;
@@ -79,6 +80,7 @@ void ble_port_reset_stats(void)
     br_diag.worker_gap_ticks=0; bb.last_worker=0;
     br_diag.worker_timer_calls=br_diag.worker_timer_last_ticks=0;
     br_diag.worker_timer_gap_ticks=br_diag.worker_timer_over_gap=0;
+    ble_time_reset();
     fm1_ble_irq_restore(k);
 }
 static void ble_irq_account(uint32_t t0,int rx)

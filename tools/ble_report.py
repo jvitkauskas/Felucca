@@ -16,8 +16,10 @@ shutil.copyfile(root/'build/felucca.fwsc',package)
 sha=hashlib.sha256(package.read_bytes()).hexdigest()
 (root/f'out/felucca-ble-{stage}.sha256').write_text(f'{sha}  out/{package.name}\n')
 app=root/'build/felucca.bin'
+base=subprocess.check_output(['git','rev-parse','--short','HEAD'],cwd=root,text=True).strip()
+snapshot='r5' if stage=='s3.1' else 'stage regression configuration (current tree)'
 ram=sym['_bss_end']-sym['_data_start']; pool=sym['_pool_end']-sym['_pool_start']
-report=f'''Felucca BLE {stage} — uncommitted above 3581aba; frozen r4
+report=f'''Felucca BLE {stage} — uncommitted above {base}; {snapshot}
 Package: {package.name}; {package.stat().st_size} B
 SHA256: {sha}
 App: {app.stat().st_size} / 581564 B; free {581564-app.stat().st_size} B
@@ -28,7 +30,7 @@ DMA: {sym['_ble_dma_end']-sym['_ble_dma_start']} B at {sym['_ble_dma_start']:#01
 Trace: {sym['_ble_trace_end']-sym['_ble_trace_start']} B at {sym['_ble_trace_start']:#010x}
 RAM text: {sym['_rt_end']-sym['_rt_start']} B
 User / supervisor stacks: 24320 / 7936 B, physical high water unmeasured
-No device, USB, network host, flashing or commit operation.
+No device, USB, device-network, flashing, commit or push operation.
 '''
 (root/f'out/BLE-{stage.upper()}-BUILD.txt').write_text(report)
 print(report)

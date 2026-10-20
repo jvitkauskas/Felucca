@@ -3,6 +3,10 @@
  * ble_ll_poll delivers only to the bounded controller-to-host transport ring. */
 #include "ble_link.h"
 #include "ble_memory.h"
+#include "ble_timing.h"
+#if FELUCCA_BLE_S31
+#include "ble_privacy.h"
+#endif
 #if FELUCCA_BLE_STAGE >= 3
 #include "ble_security.h"
 #include "ble_seed.h"
@@ -58,8 +62,12 @@ void ble_ll_reset(void)
     uint32_t epoch=ble_link.epoch+1u;
     ble_ll_init(); ble_link.epoch=epoch;
 }
-void ble_ll_create(const ble_conn_t *c,uint32_t now)
+int ble_ll_create(const ble_conn_t *c,uint32_t now)
 {
+#if FELUCCA_BLE_S31
+    if(!ble_privacy_accept(c)) return 0;
+    ble_link.peer_resolved=ble_link.resolve_index=ble_link.resolve_done=0;
+#endif
 #if FELUCCA_BLE_STAGE >= 3
     security_new(); ble_entropy_connection();
 #endif
@@ -74,6 +82,7 @@ void ble_ll_create(const ble_conn_t *c,uint32_t now)
     ble_link.anchor_event=0; ble_link.reason=0;
     ble_timeline_create(&ble_link.time,c,now); ble_link.anchor=ble_link.time.first;
     ble_link.last_worker=now;
+    return 1;
 }
 void ble_ll_close(uint8_t reason)
 {
@@ -373,7 +382,7 @@ void ble_ll_event(uint16_t event,uint32_t now)
 void ble_ll_worker(void)
 {
     unsigned budget=BLE_RX_BACKLOG;
-    uint32_t start=ble_port_ticks(),gap=start-ble_link.last_worker,key;
+    uint32_t start=ble_port_ticks(),own_start=ble_time_own(),gap=start-ble_link.last_worker,key,item;
     if(live()) {
         ble_link.diag.worker_calls++;
         if(gap>ble_link.diag.worker_gap_ticks) ble_link.diag.worker_gap_ticks=gap;
@@ -381,14 +390,15 @@ void ble_ll_worker(void)
     }
     ble_link.last_worker=start;
 #if FELUCCA_BLE_STAGE >= 3
-    security_worker();
+    item=ble_time_item_begin(); security_worker(); ble_time_item_end(item);
 #endif
-    while(budget-- && (uint32_t)(ble_port_ticks()-start)<100u*24u) {
+    while(budget-- && ble_time_budget() && (uint32_t)(ble_time_own()-own_start)<100u*24u) {
         rx_t local;
+        item=ble_time_item_begin();
         key=ble_port_lock();
-        if(!live() || ble_link.peer_stop || !queues.count) { ble_port_unlock(key); break; }
+        if(!live() || ble_link.peer_stop || !queues.count) { ble_port_unlock(key); ble_time_item_end(item); break; }
         local=queues.rx[queues.r];
-        if(local.used==1 && (local.header&3u)!=3 && queues.hcount==BLE_RX_BACKLOG) { ble_port_unlock(key); break; }
+        if(local.used==1 && (local.header&3u)!=3 && queues.hcount==BLE_RX_BACKLOG) { ble_port_unlock(key); ble_time_item_end(item); break; }
         queues.r=(uint8_t)((queues.r+1u)%BLE_RX_STREAM); queues.count--;
         if(local.used==1) queues.pdus--;
         ble_port_unlock(key);
@@ -399,7 +409,7 @@ void ble_ll_worker(void)
 #endif
             }
 #if FELUCCA_BLE_STAGE >= 3
-            else if(!security_receive(&local)) continue;
+            else if(!security_receive(&local)) { ble_time_item_end(item); continue; }
 #endif
             else if((local.header&3u)==3) control(local.data,local.n);
             else {
@@ -407,7 +417,10 @@ void ble_ll_worker(void)
                 queues.hcount++; ble_port_unlock(key);
             }
         }
+        ble_time_item_end(item);
     }
+    if(!ble_time_budget()) { ble_port_pend(); goto finish; }
+    item=ble_time_item_begin();
     key=ble_port_lock();
     if(live()) {
         instant_commit(ble_port_ticks());
@@ -434,6 +447,8 @@ void ble_ll_worker(void)
 #endif
         ble_link.state=BLE_LINK_STOPPED; ble_link.disconn_pending=1; ble_port_unlock(key);
     }
+    ble_time_item_end(item);
+finish:
     gap=ble_port_ticks()-start;
     if(gap>ble_link.diag.worker_max_ticks) ble_link.diag.worker_max_ticks=gap;
     if(queues.count) ble_port_pend();
@@ -442,11 +457,24 @@ void ble_ll_worker(void)
 int ble_ll_poll(uint8_t *type,uint8_t *p,uint16_t *n)
 {
     uint32_t key=ble_port_lock();
+#if FELUCCA_BLE_S31
+    /* Acceptance may interrupt immediately before lock acquisition. Observe
+     * creation under the lock; never format an event for an unresolved new
+     * connection after checking created_pending outside this section. */
+    if(ble_link.created_pending && !ble_link.resolve_done) {
+        ble_port_unlock(key);
+        if(!ble_privacy_resolve_step()) { ble_port_pend(); return 0; }
+        key=ble_port_lock();
+    }
+#endif
     *type=4;
     if(ble_link.created_pending) {
         const ble_conn_t *c=&ble_link.conn;
         p[0]=0x3e; p[1]=19; p[2]=1; p[3]=0; ble_put16(p+4,BLE_HANDLE);
         p[6]=1; p[7]=c->peer_type; memcpy(p+8,c->peer,6);
+#if FELUCCA_BLE_S31
+        p[7]=ble_link.peer_identity_type; memcpy(p+8,ble_link.peer_identity,6);
+#endif
         ble_put16(p+14,c->interval); ble_put16(p+16,c->latency); ble_put16(p+18,c->timeout); p[20]=c->sca;
         *n=21; ble_link.created_pending=0;
     } else if(ble_link.completed) {

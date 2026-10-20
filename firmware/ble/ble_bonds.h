@@ -4,7 +4,10 @@
 #include <stdint.h>
 union ble_store_key;
 union ble_store_value;
-typedef struct { uint32_t writes,erases,failures,malformed; uint8_t pending,records,method; } ble_bond_diag_t;
+typedef struct {
+    uint32_t writes,erases,failures,malformed,private_refused,private_dropped,orphan_dropped,net_noops;
+    uint8_t pending,records;
+} ble_bond_diag_t;
 void ble_bonds_init(void);
 void ble_bonds_flush(void);
 void ble_bonds_get_diag(ble_bond_diag_t *out);

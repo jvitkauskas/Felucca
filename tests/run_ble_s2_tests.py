@@ -13,7 +13,7 @@ def compile(p,flags=()):
     obj=out/(str(p).replace('/','_')+'.o')
     subprocess.run([cc,*common,*flags,'-c',str(p),'-o',str(obj)],check=True)
     return obj
-base=[compile(Path('firmware/ble')/(n+'.c')) for n in ('ble_logic','ble_controller','ble_link_logic','ble_link','ble_midi','ble_heap')]
+base=[compile(Path('firmware/ble')/(n+'.c')) for n in ('ble_logic','ble_controller','ble_link_logic','ble_link','ble_midi','ble_heap','ble_timing')]
 sim=compile(Path('tests/ble_s2_sim.c'))
 pure=compile(Path('tests/ble_s2_test.c'))
 def run(name,objects):

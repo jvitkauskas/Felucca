@@ -14,12 +14,17 @@
 #include "../firmware/ble/ble_security.h"
 #include "../firmware/ble/ble_seed.h"
 #include "../firmware/ble/ble_bonds.h"
+#if FELUCCA_BLE_S31
+#include "../firmware/ble/ble_privacy.h"
+#endif
 static const uint8_t pub[6]={0x58,0x65,0x67,0x8b,0x40,0x62},central[6]={1,0,0,0,0,0};
 static uint8_t smp[32][70],smp_len[32],l2[256],att[256];
 static unsigned smp_n,l2_n,l2_want,att_n,fragments65;
 static uint8_t session_ltk[16],sk[16],iv[8],request[23];
 static uint64_t tx_counter,rx_counter;
 static int tx_encrypted,started,start_req_seen;
+static int reconnect_rpa;
+static const uint8_t sample_irk[16]={0x9b,0x7d,0x39,0x0a,0xa6,0x10,0x10,0x34,5,0xad,0xc8,0x57,0xa3,0x34,2,0xec};
 static void control_rx(const uint8_t *p,unsigned n);
 static void central_rx(const uint8_t *p,unsigned n,uint8_t llid)
 {
@@ -86,6 +91,7 @@ static void control_rx(const uint8_t *p,unsigned n) { central_rx(p,n,3); pump();
 static void connect_link(void)
 {
     ble_conn_t c=sim_connection();
+    if(reconnect_rpa) { c.peer_type=1; memcpy(c.peer,(uint8_t[]){0xaa,0xfb,0x0d,0x94,0x81,0x70},6); }
     tx_encrypted=started=start_req_seen=0; tx_counter=rx_counter=0; smp_n=l2_n=l2_want=0; sim_slot[0]=sim_slot[1]=-1;
     ble_ll_create(&c,sim_ticks); assert(ble_ll_rx(1,1,0,sim_ticks,0)); pump();
     control_rx((uint8_t[9]){8,1,0,0,0,0,0,0,0},9);
@@ -103,13 +109,21 @@ int main(int argc,char **argv)
 {
     uint8_t preq[7]={1,3,0,1,16,1,1},pres[70],nc[16],np[16],confirm[70],packet[70],key[16],zero[16]={0};
     uint8_t pubc[64],privc[32]={2},pubp[64],dhkey[32],mackey[16],expected[16],saved_ltk[16],rand_ediv[10]={0};
-    unsigned i; int sc=argc>1 && !strcmp(argv[1],"sc"); ble_host_diag_t d; ble_seed_diag_t seed; ble_bond_diag_t bond;
+    unsigned i; int sc=argc>1 && !strcmp(argv[1],"sc"),rpa=argc>1 && !strcmp(argv[1],"rpa");
+    ble_host_diag_t d; ble_seed_diag_t seed; ble_bond_diag_t bond;
+    if(rpa) preq[5]=preq[6]=3;
     sim_reset(); sim_storage_reset(); sim_seed(); sim_executor_enabled=1; ble_init(pub,0); ble_host_start(); pump(); sim_advance_us(10000); pump();
     ble_host_get_diag(&d); assert(d.synced && !d.error); connect_link();
-    sim_advance_us(101000); assert(ble_ll_rx(1,1,0,sim_ticks,0)); pump();
-    assert(smp_get(11,packet)==2); /* Application's Security Request, open MIDI unchanged. */
+    if(!rpa) {
+        sim_advance_us(101000); assert(ble_ll_rx(1,1,0,sim_ticks,0)); pump();
+        assert(smp_get(11,packet)==2); /* Application's Security Request, open MIDI unchanged. */
+    }
     for(i=0;i<16;i++) nc[i]=(uint8_t)(i+80);
     preq[3]=(uint8_t)(sc ? 9 : 1); l2send(6,preq,7); assert(smp_get(2,pres)==7 && pres[4]==16);
+    if(rpa) {
+        sim_advance_us(101000); assert(ble_ll_rx(1,1,0,sim_ticks,0)); pump();
+        ble_host_get_diag(&d); assert(!d.security_requests && d.security_skipped && !d.error && !d.pair_failures);
+    }
     if(sc) {
         uint8_t privbe[32]={0},pubbe[64]; privbe[31]=2;
         /* Test-only central private scalar 2. Production host still generates its
@@ -137,8 +151,18 @@ int main(int argc,char **argv)
         assert(smp_get(7,packet)==11); memcpy(rand_ediv,packet+3,8); memcpy(rand_ediv+8,packet+1,2);
         memset(packet,0x5a,16); smp_send(6,packet,16); memset(packet,0x6b,10); smp_send(7,packet,10);
     } else memcpy(saved_ltk,key,16);
+    if(rpa) {
+        assert(smp_get(8,packet)==17); assert(smp_get(9,packet)==8);
+        smp_send(8,sample_irk,16); packet[0]=0; memcpy(packet+1,central,6); smp_send(9,packet,7);
+    }
     pump(); ble_host_get_diag(&d);
     assert(d.encrypted && d.key_size==16 && d.bonded && d.pair_method==(sc ? 2 : 1) && !d.pair_failures && !d.resets);
+    if(rpa) {
+        union ble_store_value other; memset(&other,0,sizeof other);
+        other.sec.peer_addr.val[0]=2; other.sec.key_size=16; other.sec.ltk_present=1; other.sec.sc=1;
+        assert(!ble_bonds_write(1,&other)); ble_host_get_diag(&d);
+        assert(d.identity_known && d.pair_method==1 && !d.sc); /* latest write belongs to the other peer */
+    }
     /* Open ATT read still works encrypted; timestamped write flows to MIDI. */
     l2send(4,(uint8_t[]){2,200,0},3); assert(att_n==3 && att[0]==3 && ble_get16(att+1)==200);
     ble_seed_get_diag(&seed); assert(seed.rand_calls==(sc ? 10u : 6u));
@@ -158,12 +182,30 @@ int main(int argc,char **argv)
     ble_bonds_get_diag(&bond); assert(!bond.pending && bond.writes && !bond.failures);
     /* Reconstruct the RAM cache from the NOR journal (simulated reboot of
      * store, not a second NimBLE init) and encrypt with its persistent LTK. */
-    ble_bonds_init(); sim_advance_us(101000); pump(); connect_link(); encryption_start(saved_ltk,rand_ediv);
+    ble_bonds_init();
+#if FELUCCA_BLE_S31
+    if(rpa) {
+        /* Real host Reset/resync restores the persisted IRK before advertising. */
+        ble_host_resume(); pump(); sim_advance_us(101000); pump();
+        { ble_privacy_diag_t privacy; ble_privacy_get_diag(&privacy); assert(privacy.enabled && privacy.count==2); }
+        reconnect_rpa=1;
+    }
+#endif
+    sim_advance_us(101000); pump(); connect_link(); encryption_start(saved_ltk,rand_ediv);
     ble_host_get_diag(&d); assert(d.encrypted && d.bonded && d.key_size==16 && !d.pair_failures);
+    if(rpa) {
+        assert(d.identity_known && !d.sc && d.pair_method==1 && !memcmp(d.peer_identity,central,6));
+#if FELUCCA_BLE_S31
+        { ble_privacy_diag_t privacy; ble_privacy_get_diag(&privacy); assert(privacy.matches==1); }
+#endif
+        { ble_security_diag_t enc; ble_security_get_diag(&enc); assert(!enc.negative_replies); }
+        { unsigned requests=d.security_requests; sim_advance_us(101000); pump(); ble_host_get_diag(&d);
+          assert(d.security_requests==requests && d.security_skipped); }
+    }
     /* A corrupted tag ends the physical link before Disconnection Complete. */
     { uint8_t bad[6]={2,0x13}; assert(ble_ccm(sk,iv,tx_counter,1,3,bad,2,0)); bad[5]^=1;
       assert(ble_ll_rx(1,0x603,bad,sim_ticks,0)); pump(); assert(ble_link.reason==0x3d && ble_link.state==BLE_LINK_IDLE); }
-    ble_host_get_diag(&d); assert(!d.resets && !d.assertions && !d.heap_fail && !d.event_drop && !d.acl_drop);
-    printf("NimBLE %s Just Works: real SMP, HCI LTK, CCM link, key size 16, persistent bond reconnect, MTU 200, encrypted MIDI both directions, MIC failure: PASS; LE Rand %u, heap peak %u\n",sc ? "SC" : "legacy",seed.rand_calls,d.heap_peak);
+    ble_host_get_diag(&d); assert(d.resets==(unsigned)rpa && !d.assertions && !d.heap_fail && !d.event_drop && !d.acl_drop);
+    printf("NimBLE %s Just Works: real SMP, HCI LTK, CCM link, key size 16, persistent bond reconnect, MTU 200, encrypted MIDI both directions, MIC failure: PASS; LE Rand %u, heap peak %u\n",rpa ? "legacy/RPA+HCI-Reset/S-13" : sc ? "SC" : "legacy",seed.rand_calls,d.heap_peak);
     return 0;
 }

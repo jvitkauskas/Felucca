@@ -190,6 +190,9 @@ def build_app():
         stage=os.environ.get("FELUCCA_BLE_STAGE","3")
         if stage not in ("2","3"): raise SystemExit("FELUCCA_BLE_STAGE must be 2 or 3")
         flags.append(f"-DFELUCCA_BLE_STAGE={stage}")
+        if os.environ.get('FELUCCA_BLE_S31')=='1':
+            if stage!='3': raise SystemExit('FELUCCA_BLE_S31 requires stage 3')
+            flags.append('-DFELUCCA_BLE_S31=1')
         dbm = os.environ.get("FELUCCA_BLE_TX_DBM")
         if dbm is not None:
             if not re.fullmatch(r"-?\d+", dbm) or not -127 <= int(dbm) <= 20:
@@ -225,7 +228,7 @@ def build_app():
         tc("cc", *[f for f in flags if not f.startswith(("-I", "-D", "-W"))], "-c",
            OUT / "felucca_size.ll", "-o", OUT / "felucca.o")
     if ble:
-        for source in ("ble_logic", "ble_controller", "ble_link_logic", "ble_link", "ble_midi", "ble_heap") + (("ble_crypto", "ble_seed") if stage=="3" else ()):
+        for source in ("ble_logic", "ble_controller", "ble_link_logic", "ble_link", "ble_midi", "ble_heap", "ble_timing") + (("ble_crypto", "ble_seed", "ble_privacy") if stage=="3" else ()):
             obj = OUT / f"{source}.o"
             tc("cc", *flags, "-Wextra", "-Werror", "-std=c11", "-Ifirmware/ble", "-Ifirmware/third_party/nimble/ext/tinycrypt/include", "-c",
                FW / "ble" / f"{source}.c", "-o", obj)
