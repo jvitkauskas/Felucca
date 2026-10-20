@@ -1,0 +1,285 @@
+>>> ble
+ble
+BLE S3.1 / NimBLE 1.9.0 / MIDI; SC Just Works + legacy
+enc_phase_N_S1_S2_PA_PB_PC 0
+enc_rx_on 1
+enc_tx_on 1
+enc_enabled 1
+enc_starts 1
+enc_refreshes 0
+mic_failures 0
+enc_phase_errors 0
+ltk_requests 1
+ltk_negative 0
+enc_tx_counter_hi 0
+enc_tx_counter_lo 0x00000031
+enc_rx_counter_hi 0
+enc_rx_counter_lo 0x00000072
+seed_FAILED_FIRST_CHAINED_PROVISIONED_UNPERSISTED 2
+seed_origin 2
+seed_STORED_NOT_STORED_UNVERIFIED 0
+seed_sequence 0x0000000C
+seed_credit_bits 0
+seed_malformed 0
+seed_conflicts 0
+seed_flash_failures 0
+le_rand_calls 0
+entropy_bytes 12
+reseed_attempts 1
+bond_records 8
+bond_pending 0
+bond_writes 0
+bond_erases 0
+bond_failures 0
+bond_malformed 0
+bond_private_refused 0
+bond_private_dropped 0
+bond_orphan_dropped 0
+bond_equal_writes_skipped 0
+rl_capacity 4
+rl_entries 2
+rl_enabled 1
+rl_attempts 0
+rl_matches 0
+rl_unresolved 0
+rl_aes_failures 0
+rl_network_rejected 0
+executor_selftest 1
+executor_dispatch_max_us 799
+executor_dispatch_live_max_us 799
+executor_dispatch_negative 0
+executor_wall_max_us 941
+executor_own_max_us 206
+executor_item_max_us 63
+executor_item_over_100us 0
+executor_item_max_kind housekeep
+executor_item_max_opcode 0x00000000
+executor_kind service max_ticks 135 count 527737 over100 0 opcode 0000
+executor_kind key max_ticks 706 count 527711 over100 0 opcode 0000
+executor_kind rx max_ticks 1299 count 527671 over100 0 opcode FFFF
+executor_kind control max_ticks 794 count 79 over100 0 opcode 0008
+executor_kind housekeep max_ticks 1534 count 527711 over100 0 opcode 0000
+executor_kind delivery max_ticks 692 count 527686 over100 0 opcode 0000
+executor_kind resolution max_ticks 192 count 1 over100 0 opcode 0000
+executor_kind driver max_ticks 165 count 527687 over100 0 opcode 0000
+executor_kind command max_ticks 649 count 23 over100 0 opcode 201A
+executor_kind stop max_ticks 128 count 1 over100 0 opcode 0C03
+executor_kind adv_prepare max_ticks 780 count 23 over100 0 opcode 200A
+executor_kind entropy_sample max_ticks 1352 count 527711 over100 0 opcode 0000
+executor_kind entropy_reseed max_ticks 603 count 2 over100 0 opcode 0000
+executor_kind entropy_output max_ticks 665 count 1 over100 0 opcode 0000
+executor_kind entropy_rekey max_ticks 512 count 2 over100 0 opcode 0000
+executor_kind control_rx max_ticks 1271 count 79 over100 0 opcode 0006
+executor_kind refill max_ticks 730 count 72 over100 0 opcode 0006
+executor_kind reset_clear max_ticks 134 count 25 over100 0 opcode 0C03
+executor_kind reset_defaults max_ticks 268 count 1 over100 0 opcode 0C03
+executor_kind reset_stats max_ticks 374 count 1 over100 0 opcode 0C03
+executor_kind reset_complete max_ticks 230 count 1 over100 0 opcode 0C03
+executor_own_over_250us 0
+executor_over_250us_plus_item 0
+refill_max_us 49
+refill_ccm_max_us 29
+refill_other_max_us 27
+refill_over_80us 0
+worker_timer_calls 527737
+worker_timer_max_gap_us 1944
+worker_timer_over_7500us 0
+worker_timer_last_ticks 0xF403A1CD
+worker_timer_con 0x00000019
+worker_timer_cnt 3423
+worker_timer_prd 6000
+worker_timer_irqcfg 0x00000005
+ble_breadcrumb 0x30048825
+ble_breadcrumb_ticks 0xF403A1DB
+ble_fault_breadcrumb 0x00000000
+ble_fault_ticks 0x00000000
+ble_fault_crash_count 0
+link_state_idle_created_up_closing_stopped 2
+link_epoch 2
+link_established 1
+conn_interval_1250us 12
+conn_latency 0
+conn_timeout_10ms 400
+conn_event 29825
+connections 1
+connect_invalid 0
+conn_events 17896
+rx_A_new 17591
+rx_B_crc_5_13 36
+rx_C_repeat_9 69
+rx_D_unknown 0
+retransmission_rx 69
+rx_delayed_stamp 58
+rx_backpressure 0
+rx_queued 0
+rx_peak 2
+tx_queued_loaded 0
+establishment_fail 0
+supervision_fail 0
+disconnects 0
+last_disconnect_reason 0x00000000
+conn_updates 1
+channel_map_updates 4
+late_instants 0
+acl_tx_accepted 15
+acl_tx_rejected 0
+acl_rx 39
+acl_acked 15
+ncp_credits 15
+acl_flushed 0
+control_dropped 0
+control_ignored 35
+worker_max_gap_us 1945
+worker_max_us 882
+worker_over_7500us 0
+worker_calls 522624
+terminate_timeouts 0
+nimble_running 1
+nimble_synced 1
+nimble_syncs 1
+nimble_resets 0
+nimble_error 0
+nimble_assertions 0
+nimble_event_drop 0
+nimble_acl_drop 0
+nimble_encrypted 1
+nimble_bonded 1
+nimble_key_size 16
+nimble_pair_method_legacy1_SC2 2
+security_requests 0
+nimble_bond_sc 1
+nimble_bond_identity_known 1
+nimble_peer_identity_type 0
+nimble_peer_identity 40 77 9C B8 BF E8
+security_skipped 1
+security_already 0
+pair_failures 0
+pair_last_status 0
+nimble_main_gap_ms 43
+nimble_mtu 200
+midi_echo 0
+nimble_subscribed 1
+nimble_heap_used 384
+nimble_heap_peak 396
+nimble_heap_fail 0
+midi_packets_in 24
+midi_packets_out 0
+midi_bad 0
+midi_drop 0
+frozen 0
+loop_iters_per_us_x1000 44999
+loop_ticks 53334
+clock 0 000001C1
+clock 1 00010400
+clock 2 00000006
+clock 3 00010200
+icfg_probe 030B0600 030B0600 030B0600 043F0700
+ticks_while_irq_masked 0
+error 0
+failure_stage 0
+calibration_1_record_2_self 1
+vm_status 1
+btif_status 1
+records_present 0x0000001F
+public_address_hci 6C DF C0 52 60 FD
+configured_random_hci 00 00 00 00 00 00
+trim_crc 0x0000AC73
+bringup_us 68786
+bringup_end_ticks 0x00E9ABAF
+first_hci_command_ticks 0x00EA7265
+step_us 1 59
+step_us 2 6
+step_us 3 4787
+step_us 4 15
+step_us 5 52507
+step_us 6 114
+step_us 7 7
+step_us 8 35
+step_us 9 10
+step_us 10 4699
+step_us 11 5421
+step_us 12 807
+step_us 13 55
+step_us 14 46
+step_us 15 86
+enabled 0
+stopping 0
+driver_step 0
+driver_error 0
+commands 24
+replies 25
+last_opcode 0x0000201A
+last_status 0x00000000
+intake_rejected 0
+command_overflow 0
+advertising_events 48
+event_irqs 34903
+rx_irqs 17717
+scan_req 20
+connect_ignored 0
+bad_rx 0
+rx_max_ticks 2331
+event_max_ticks 1227
+rx_over_380us 0
+event_work_max_ticks 1027
+event_work_over_150us 0
+ble_critical_max_ticks 6031
+ble_critical_over_390us 0
+main_controller_gap_us 1945
+stop_timeouts 0
+restarts 0
+enable_ticks 0x00EBB3BF
+first_event_close_ticks 0x00ECFDBB
+dma_base 0x01C6FC70
+dma_end 0x01C70988
+modem_base 0x01C70988
+dma_canary_errors 0
+p33_timeouts 0
+trace_records 124
+trace_total 124
+trace_frozen_drops 0
+vco_limits 47 47 47 47 47 49 4E 54 5B 62 69 70 77 7E 86 8D 92 88 88 88 88 88 88 89 8C 93 9A A2 A7 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 A9 3F
+> >>> status
+status
+felucca v1.0.3
+uptime_ms 531078
+cpu_pct 12
+audio_max_us 740
+audio_late 0
+voices_shed 0
+voices_given_up 0
+track 1
+batt_raw 630
+engine ANALOG
+preset ACID
+bpm 120
+playing 0
+boots 1
+usb_resets 2
+usb_sof 530179
+usb_suspends 0
+usb_retries 0
+usb_frame 74
+usb_frame_stalls 0
+usb_max_gap_polls 357
+midi_rx_pkts 0
+midi_tx_pkts 0
+uac_alt 0
+uac_starts 4
+uac_pkts 0
+uac_rate_hz 0
+uac_underruns 0
+uac_overruns 0
+uac_missed 0
+uac_stalls 0
+uac_adj_up 0
+uac_adj_down 0
+uac_fill 0
+uac_fill_lo -1
+uac_fill_hi 0
+uart_enabled 1
+uart_rx_bytes 0
+uart_rx_msgs 0
+uart_rx_drops 0
+flash 1
+> 

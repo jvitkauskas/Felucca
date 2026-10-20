@@ -1,0 +1,37 @@
+BLE S3.1c central-initiated connection update (F-12) - first hardware run, 2026-10-21 01:10-01:30
+Image: felucca-ble-s3.1c.fwsc c287bfe5... Central: desktop BlueZ, Intel-class adapter E8:BF:B8:9C:77:40,
+raw HCI LE Connection Update from ble_midi_bench.py --conn-update (sudo), btmon capture
+out/s31c_cu.btsnoop. Link: encrypted (SC bond), 15 ms (interval 12, latency 0, timeout 4 s; BlueZ's own
+earlier update applied, conn_updates 1). run10.sh 10-minute bench running (arpeggios every 2 min).
+
+RESULT: FAIL. Central-initiated updates are not applied, and the link layer is left corrupted.
+
+1. Update to 7.5 ms (handle 0x800, 6/6/0/500), desktop t=87.19 s: Command Status 0x00; LE Connection Update
+   Complete 0x00 at t=87.31 s with interval 7.5 ms. FM-1: conn_updates stays 1, conn_interval stays 12,
+   late_instants 0; wall-clock measurement 1502 conn_event increments in 22.52 s = 14.99 ms/event, so the
+   FM-1 never switched. The link survived because 15 ms is exactly 2 x 7.5 ms (same anchors if WinOffset
+   kept the grid). control_ignored 28 -> 32 around this time (it is non-zero in normal sessions too: 10-29).
+2. Update to 30 ms (24/24/0/500) about 3 minutes later: desktop Update Complete 0x00 at 30 ms. FM-1:
+   control_ignored 32 -> 33, conn_updates still 1. From then on conn_event and conn_events stayed frozen
+   (29825 / 17896) for >12 s while event_irqs kept rising (~100/s), rx_irqs ~2/s, worker_calls jumped from
+   7,350 to ~500,000 (the worker ran on every timer tick), acl_rx stopped advancing, and the driver diag
+   showed enabled 0 with link_state 2 (up). Full dump: out/s31c_cu_stuck_ble.txt.
+3. The FM-1 eventually recorded supervision_fail 1, reason 0x08; the desktop kept the link until its bench
+   ended at t=605 s (Disconnect Complete 0x16 local). BlueZ then reconnected (Enhanced Connection Complete,
+   15 ms; its own update to 15 ms applied: conn_updates 2).
+4. On the NEW link the FM-1 state is still wrong: conn_event advanced 6674 in 12.6 s (1.89 ms/event at a
+   15 ms interval), worker_calls still climbing fast, control_ignored 43. Dump:
+   out/s31c_cu_after_reconnect_ble.txt. After a desktop disconnect (0x13) the FM-1 advertises normally,
+   and the worker stops spinning.
+MIDI: all 40 arpeggio notes arrived over the run (midi_packets_in 40); audio_max 766 us, audio_late 0.
+
+Hypothesis [inferred]: update 1 was accepted as pending (instant_kind set), but its instant never took
+effect. Every later update is ignored as "procedure pending" (ble_link.c instant_kind check), and the
+pending/instant state is not fully cleared at link close, so it corrupts the next link's event timing.
+Earlier sessions applied BlueZ's and Android's own updates (8 and 17 per run), so the failing path is
+specific: a central-initiated update requested through raw HCI, starting with a shorter interval
+(15 -> 7.5 ms). The LL PDU values (WinSize, WinOffset, Instant) are unknown without a sniffer.
+NEEDED: a diag of the pending procedure (kind, instant, params, the event counter at receipt, programmed
+flag) and a reason code per ignored control PDU (opcode + reason), cleared state at link close
+verified by a test; then repeat single updates 15->7.5, 15->30, 7.5->15 with btmon, and capture with the
+nRF52840 sniffer when available.
