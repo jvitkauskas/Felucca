@@ -1,0 +1,35 @@
+BLE S3.1 round 3 (spec r7) bench - 2026-10-20 night
+Image: out/felucca-ble-s3.1c.fwsc sha256 c287bfe52f2ba203ddc1cc89cebc30777ffd5e9d860d61dcd77c84c2f2d2d800
+(flashed over S3.1b, CRC verified; backup ~/backups/fm1-20261020-231432.bin). Same unit, phone and desktop.
+
+RESULT: PASS. W_item <= 100 us now holds on the device (max 61 us over about 1.36 M items);
+F-24 and F-28 regressions pass; 10-minute encrypted desktop link passes.
+
+Boot: seed CHAINED seq 9; 8 bond records; rl_entries 2; executor_selftest 1; error 0.
+Operator notes: the desktop auto-connected at boot before its adapter was powered off (clean 0x15 end);
+the first phone cycles failed only because the phone screen was locked (FM-1 advertising normally,
+about 15 events/s). Phone kept awake with `svc power stayon true` during the run, reset afterwards.
+
+PASS  F-24: 3 cycles from new RPAs (one after the re-pair): rl_matches = attempts, LTK reply,
+      ltk_negative 0, encrypted, no prompt, subscribed.
+PASS  F-28: phone-only forget, re-pair: resolved to the stale entry, legacy pairing completed,
+      pair_failures 0, encrypted, bonded, rl_entries stays 2.
+PASS  10-minute encrypted BlueZ link (SC, 15 ms, 23:27-23:37): 5 arpeggios, midi_packets_in 40,
+      midi_bad 0, midi_drop 0, mic_failures 0, ltk_negative 0, ACL 118/118/152, clean end 0x13;
+      audio_max 742 us, audio_late 0, voices_shed 0, dma_canary_errors 0.
+
+Timing after all sessions (24 MHz ticks; 2400 ticks = 100 us):
+  W_item max 61 us (kind housekeep 1474 ticks), item_over_100us 0              PASS (was 108 us)
+  control (decoded, opcode 0x08 LL_ENC_REQ max) 870 ticks = 36 us
+  control_rx (authentication, opcode 0x06 LL_START_ENC_RSP max) 1272 ticks = 53 us
+  refill kind 746 ticks = 31 us (opcode 0x06)
+  HCI Reset steps: reset_clear 134 (6 us), reset_defaults 285 (12 us), reset_stats 389 (16 us),
+    reset_complete 231 (10 us), stop 128 (5 us)                                 (was 108 us in one item)
+  others: rx 1308 (55 us), entropy_sample 1402 (58 us), key 769, delivery 752, adv_prepare 791,
+    command 777 (2008), resolution 478 ticks
+  dispatch max 766 us, negatives 0; own max 210 us, own_over_250 0, over_250_plus_item 0   PASS
+  refill section max 70 us = CCM 29 + other 44 (sum of maxima, not one run), over_80 0      PASS
+  worker_timer_max_gap 2948 us (bond flash write, no link)                     INFO
+
+NOT RUN: 7.5 ms interval (no parameter-update fixture), F-25 40-session churn, F-26 consent delays,
+H-22..H-25 on air, sniffer items (A9 remains open).
