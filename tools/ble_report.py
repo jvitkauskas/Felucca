@@ -5,7 +5,7 @@ from pathlib import Path
 import hashlib, re, shutil, subprocess, sys
 root=Path(__file__).resolve().parents[1]
 stage=sys.argv[1]
-assert re.fullmatch(r's[23](?:\.1b?)?',stage)
+assert re.fullmatch(r's[23](?:\.1[bc]?)?',stage)
 tool=Path('/root/felucca-ble-env/jieli/toolchain/common/bin/objdump')
 symbols=subprocess.check_output([str(tool),'-t',str(root/'build/felucca.elf')],text=True)
 sym={line.split()[-1]:int(line.split()[0],16) for line in symbols.splitlines() if re.match(r'^[0-9a-f]{8} ',line)}
@@ -17,7 +17,7 @@ sha=hashlib.sha256(package.read_bytes()).hexdigest()
 (root/f'out/felucca-ble-{stage}.sha256').write_text(f'{sha}  out/{package.name}\n')
 app=root/'build/felucca.bin'
 base=subprocess.check_output(['git','rev-parse','--short','HEAD'],cwd=root,text=True).strip()
-snapshot='r6' if stage=='s3.1b' else 'r5' if stage=='s3.1' else 'stage regression configuration (current tree)'
+snapshot='r7' if stage=='s3.1c' else 'r6' if stage=='s3.1b' else 'r5' if stage=='s3.1' else 'stage regression configuration (current tree)'
 ram=sym['_bss_end']-sym['_data_start']; pool=sym['_pool_end']-sym['_pool_start']
 report=f'''Felucca BLE {stage} — uncommitted above {base}; {snapshot}
 Package: {package.name}; {package.stat().st_size} B

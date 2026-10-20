@@ -1,5 +1,163 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
-# BLE S3.1b — round 2, frozen r6
+# BLE S3.1c — round 3, frozen r7
+
+Uncommitted on `ble-controller` above c5973a1 (round-2 code b242adc).
+`out/BLE-S3.1b-BENCH-R1.txt` records the supplied baseline: F-24/F-28 and
+ten-minute encrypted link pass; Reset 2589 ticks (107.875 us), control 2525
+ticks (105.208 us). Those are S3.1b measurements. S3.1c is not bench-qualified.
+No device, flashing, commit or push operation was performed.
+
+## Round 3 result and artifacts
+
+Use the build command below with `python3 tools/ble_report.py s3.1c`.
+Run `python3 tests/target_budget.py` and `python3 tools/ble_s31_audit.py`.
+Artifacts are `out/felucca-ble-s3.1c.fwsc`, its `.sha256`,
+`out/BLE-S3.1C-BUILD.txt`, `out/ble-s3.1c-build.log`,
+`out/ble-s3.1c-target-budget.log`, and `build/felucca-ble-s3.1c.*`.
+Stage-2/stage-3 option logs use `out/ble-s3.1c-{s2,s3}-build.log`.
+Input/provenance/changed-file/artifact manifests use `out/BLE-S3.1c-`;
+the audit log is `out/ble-s3.1c-audit.log`. Historical manifests are retained.
+
+Package SHA256:
+`c287bfe52f2ba203ddc1cc89cebc30777ffd5e9d860d61dcd77c84c2f2d2d800`.
+Application 527036 / 581564 B; static RAM 97064 / 98304 B (1240 B free);
+pool including DMA 331108 / 344064 B (12956 B free). DMA is 4340 B at
+0x01C6FC70; stack reservations remain 24320 B user / 7936 B supervisor.
+Physical stack high water is unmeasured.
+
+## Round 3 Reset implementation
+
+Reset now begins by inhibiting acceptance, LL worker/delivery and TX picking,
+then requesting hardware stop. No live DMA buffer is reclaimed. Further
+executor calls perform these items, and each checks the pass budget:
+
+1. `reset_stats`: platform/timing and entropy counters. Clear timing first so
+   later Reset slices remain visible in F-27.
+2. `stop`: one poll of the existing stop state machine, retaining its deadline,
+   instance masking/ACK and DMA ownership rules. The inherited latched stop
+   failure keeps quarantine and returns Hardware Failure.
+3. `reset_clear`: at most **128 bytes** of queues or link state per item; then
+   a separate security-clear/cancel item. Completed random output is erased;
+   an unfinished job finishes rekey and discards its output after Reset.
+4. `reset_defaults`: masks, advertising, random address, empty/disabled
+   resolving list and controller counters. Public identity and TX power persist.
+5. `reset_complete`: successful 0C03 Command Complete, only after all work.
+
+The Reset guard is outside the objects being cleared. All queue/link clears
+follow hardware stop; the final clear installs the new epoch. There is no old
+connection/LTK/encryption/NCP/disconnection/timer event after completion.
+DRBG state/counter, readiness and seed records survive; no flash access occurs.
+Started commands finish first, cancelled queued work still receives exactly
+one reply, and advertising preparation completes before a following Reset.
+Reset never waits on main-loop or host work.
+
+The linked target has **2584 bytes of queues** (21 slices), **340 bytes of
+link state** (3 slices), **120 bytes of security state**, and **248 bytes of
+random-job state**. The final security item clears at most the last two fixed
+objects (368 bytes); unfinished random work is cancelled, not hashed here.
+These clears contain no AES/SHA and no variable queue drain. The injected
+**3 ticks per copied/cleared byte** model gives queue slices **384 ticks / 16
+us**, defaults **1005 / 41.875 us**, stats **1056 / 44 us**, completion **132 /
+5.5 us**. Cancelling output ready but unconsumed gives the largest secure clear,
+**1152 ticks / 48 us**. All steps are <=70 us in that model. The old 108-us
+aggregate provides no individual target slice measurement. Small memory
+slices should have margin; unchanged stop work previously ran in housekeeping
+(61.04-us maximum). Target confirmation is still required.
+
+## Round 3 control attribution and split
+
+**The historical control maximum's opcode is unknowable from the retained
+record.** Session-key AES and random SHA already ran in `key` and entropy
+items, outside `control`. The concrete expensive candidate is the encrypted
+response/refill path, including **0x06 LL_START_ENC_RSP**: input CCM (5 AES
+blocks), output response CCM (5), then a waiting 27-byte ACL CCM (7), all in
+one old item: **three CCM calls / 17 AES blocks**. Encrypted pause request
+(0x0A), feature/version and other replying controls could combine CCM too.
+
+The common path now has a `control_rx` authentication/staging item, a
+`control` dispatch item, and separate `refill` items for **one TX slot/CCM
+each**. RX interrupts and ordinary refill callers retain two-slot behavior.
+The limited HAL refill still checks both slots for completion and retains
+boundary-buffer exclusion, the original snapshot rules and DMA barriers.
+`control_rx` and `control` record decoded LL opcodes in the global/per-kind
+maximum fields; refills record their causing opcode. Markers use 0100 + ID
+(0101 RX_ON, 0102 RX_OFF, 0103 REJECT_ACK); FFFF means unavailable, including
+failed authentication. Ciphertext is never reported as an authenticated
+opcode. Existing first-maximum tie behavior and console reporting apply.
+
+No later PDU/marker passes staged control. ENC_RSP queuing precedes LTK Request;
+LTK Command Complete precedes key/reject work. The original critical section
+still covers TX enable plus the first encrypted response's queue insertion:
+the response takes TX counter zero before ACL. Start/pause/reject barriers,
+stream-position RX_ON/OFF changes and refresh event selection are retained.
+Every pending stage explicitly repends the executor, including between slot
+refills. The loop allows four steps per old PDU to retain drain capacity, with
+the existing 100-us LL-loop and 250-us pass checks between items. A yield waits
+for executor dispatch G, never main or the next connection event. Instant,
+supervision, terminate and central response deadlines are unchanged; no new
+peripheral LTK timer is armed. There is no unrequested host-dependent wait.
+
+Qualification estimates: authentication is one CCM (old RX maximum 52.92 us),
+dispatch has no AES/SHA, and one-slot refill is one CCM plus bookkeeping. The
+26-us CCM deadline plus the old 38-us refill remainder suggests **about 64 us**
+for refill. The **8 us/AES block + 1 tick/controller memory byte** model
+observes authentication **1014 ticks / 42.25 us**, dispatch **1 tick**, refill
+**1444 / 60.167 us**, verifying block counts **5 / 0 / 5 / 7** across four
+items. TinyCrypt emulates the peripheral; its internal software copies are
+excluded from controller-memory charges. Models and estimates are not proof
+of the physical W_item bound.
+
+## Round 3 validation and owner bench checklist
+
+Complete ASan/UBSan suites (warnings as errors):
+`tests/run_ble_s1_tests.sh`, `python3 tests/run_ble_s2_tests.py`,
+`python3 tests/run_ble_s3_tests.py`, and the latter with `--s31`.
+Logs are `out/ble-s3.1c-{s1,s2,s3}-tests.log` and
+`out/ble-s3.1c-tests.log`. The inherited TinyCrypt AES shift-base-only exception
+remains. Upstream sources are unchanged; target guards and DSP comparison run.
+
+`tests/ble_s31_steps.c` forces pass yields between authentication, dispatch
+and each refill. It checks AES counts, opcodes, <=70-us modeled items, the
+counter-zero response before ACL, pause marker order and unavailable opcode
+on MIC failure. Reset is tested at eleven encryption stages: queued/decoded
+ENC_REQ, entropy request/reseed, LTK pending/delivered, reply pending, loaded
+START_ENC_REQ, pending RX_ON, staged START_ENC_RSP and response/refill pending;
+also entropy-output readiness, advertising preparation/active advertising,
+and mid-resolution. Tests hold stop busy and assert loaded-slot retention,
+exercise stale markers/timers, preserve public/power/DRBG state, prohibit
+flash writes and old events, and confirm random-service progress afterwards.
+Queued cancellation replies/defaults are checked. Existing real pinned-host
+F-24/F-28 legacy/SC, privacy/store, restart/reject/barrier/MIC, and ten-minute
+virtual-link suites are retained. S1/S2 tests now await resumed completion.
+
+1. **F-27:** capture boot, Reset, legacy/SC start and restart diagnostics,
+   retaining every `executor_kind` count/max/overrun/opcode plus global fields.
+   Exercise pending ACL at 06 with two TX slots available. Check `command`
+   0C03, `stop`, all `reset_*`, `control_rx`, `control`, `refill`, and entropy
+   kinds. Require each <=2400 ticks (100 us), preferably <=1680 (70 us), zero
+   item/pass overruns, own pass <=250 us + longest item, dispatch <=7.5 ms/no
+   negatives, refill <=80 us. Retain CCM/remainder separately. Run ten minutes
+   each at encrypted 15 ms and 7.5 ms under audio/USB/UI load; save audio
+   late/shed, canary and stack evidence. Capture before another Reset clears
+   the counters; do not sum unrelated per-kind maxima.
+2. **F-24 regression:** restore both bonds/list after Reset and `ble host`;
+   fresh-RPA reconnects without prompts/negative LTK, correct Enhanced identity
+   + peer RPA and encrypted MIDI both ways. Repeat four cycles and power cycle.
+   Confirm sync LE mask `1f 02 00 00 00 00 00 00` and restored list entries.
+3. **F-28 regression:** retain DUT bond, forget on phone only, pair again;
+   successful 2028 before 2027, one entry per peer, no Confirm Value/DHKey
+   failure, then three fresh-RPA encrypted reconnects. Repeat changed IRK/new
+   RPA and desktop SC where possible, plus live unpair/replacement.
+
+The round-2 snoop answers B23/B24; no LL/HCI version change is included.
+Remaining F-25/F-26, on-air H-22..H-25, A9, D-1/D-6, journal crash window,
+uncredited entropy and physical stack/RF qualification retain their status.
+See `docs/SPEC-GAPS-S3.1.md`, **Round 3 / r7**.
+
+## Archived round-2 / r6 implementation report
+
+The following is the historical pre-bench report; its old status statements
+and artifacts describe round 2, not the current round-3 tree.
 
 Changes are uncommitted on `ble-controller` above ee63586 (implementation
 round 1: 94eb8a8). The owner’s `out/BLE-S3.1-BENCH-R1.txt` was read first.

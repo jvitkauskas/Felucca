@@ -16,6 +16,7 @@ void ble_port_pend(void) { fm1_ble_worker_pend(); }
 uint32_t ble_port_lock(void) { return fm1_ble_irq_save(); }
 void ble_port_unlock(uint32_t key) { fm1_ble_irq_restore(key); }
 void ble_port_refill(void) { bb_refill(); }
+void ble_port_refill_one(void) { bb_refill_limit(1); }
 void ble_port_rx_recover(void) { if(bb.state==4) bb_connected_rx(fm1_ticks(),1); }
 void ble_port_window(uint32_t us) { bb_window(us); }
 void ble_port_priority(unsigned p) { bb_priority(p); }

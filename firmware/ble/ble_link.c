@@ -19,12 +19,16 @@ typedef struct { uint32_t epoch; uint16_t header; uint8_t n,used; uint8_t data[B
 typedef struct { uint32_t epoch; uint8_t n,llid,state,terminate; uint8_t data[27]; uint32_t order; } tx_t;
 static struct {
     rx_t rx[BLE_RX_STREAM],host_rx[BLE_RX_BACKLOG];
+    rx_t control;
+    uint8_t control_ready,defer_refill,refill_pending;
+    uint16_t control_opcode,refill_opcode;
     tx_t tx[BLE_TX_COUNT];
     struct { uint32_t epoch; uint8_t n,data[14]; } meta[16];
     uint8_t mr,mw,mc;
     uint32_t order;
     uint8_t r,w,count,pdus,hr,hw,hcount;
 } queues __attribute__((section(".pool.ble")));
+static struct { uint32_t epoch; unsigned offset; uint8_t active; } reset;
 
 static void meta_add(const uint8_t *p,uint8_t n)
 {
@@ -43,7 +47,13 @@ static void instant_commit(uint32_t now)
     } else { memcpy(ble_link.conn.map,ble_link.pending.map,5); ble_link.diag.map_updates++; }
     ble_link.instant_kind=0;
 }
-static int live(void) { return ble_link.state==BLE_LINK_CREATED || ble_link.state==BLE_LINK_UP; }
+static int live(void) { return !reset.active && (ble_link.state==BLE_LINK_CREATED || ble_link.state==BLE_LINK_UP); }
+static void tx_refill(void)
+{
+    if(queues.defer_refill) {
+        queues.refill_pending=2; queues.refill_opcode=queues.control_opcode; ble_port_pend();
+    } else ble_port_refill();
+}
 static void tx_flush(void)
 {
     unsigned i;
@@ -53,17 +63,45 @@ static void tx_flush(void)
     }
 }
 void ble_ll_init(void) { memset(&ble_link,0,sizeof ble_link); memset(&queues,0,sizeof queues);
+    memset(&reset,0,sizeof reset);
 #if FELUCCA_BLE_STAGE >= 3
     security_init();
 #endif
 }
 void ble_ll_reset(void)
 {
-    uint32_t epoch=ble_link.epoch+1u;
-    ble_ll_init(); ble_link.epoch=epoch;
+    ble_ll_reset_begin();
+    while(!ble_ll_reset_step()) { } /* synchronous test/startup helper only */
+}
+void ble_ll_reset_begin(void)
+{
+    /* No reclaim until stop_poll succeeds. Inhibit worker, delivery, new
+     * acceptance and TX picking even if a stop interrupt preempts Reset. */
+    reset.epoch=ble_link.epoch+1u; reset.offset=0; reset.active=1;
+    ble_link.state=BLE_LINK_CLOSING;
+}
+int ble_ll_reset_step(void)
+{
+    unsigned n;
+    if(!reset.active) return 1;
+    if(reset.offset<sizeof queues) {
+        n=sizeof queues-reset.offset; if(n>128u) n=128u;
+        memset((uint8_t *)&queues+reset.offset,0,n); reset.offset+=n; return 0;
+    }
+    if(reset.offset<sizeof queues+sizeof ble_link) {
+        unsigned off=reset.offset-sizeof queues;
+        n=sizeof ble_link-off; if(n>128u) n=128u;
+        memset((uint8_t *)&ble_link+off,0,n); reset.offset+=n; return 0;
+    }
+#if FELUCCA_BLE_STAGE >= 3
+    security_init(); /* a separate item; cancel output, retain DRBG/rekey */
+#endif
+    ble_link.epoch=reset.epoch; reset.active=0; return 1;
 }
 int ble_ll_create(const ble_conn_t *c,uint32_t now)
 {
+    if(reset.active) return 0;
+    queues.control_ready=queues.refill_pending=0;
 #if FELUCCA_BLE_S31
     if(!ble_privacy_accept(c)) return 0;
     ble_link.peer_resolved=ble_link.resolve_index=ble_link.resolve_done=0;
@@ -167,7 +205,7 @@ static int tx_queue(const uint8_t *p,uint8_t n,uint8_t llid,int end)
         if(ble_link.hold<2) ble_link.hold=2;
         ble_port_latency(ble_link.conn.latency,0);
         ble_port_priority(llid==3 ? 30u : 28u);
-        ble_port_refill(); return (int)i;
+        tx_refill(); return (int)i;
     }
     if(llid==3) ble_link.diag.ctrl_drop++;
     return -1;
@@ -381,8 +419,11 @@ void ble_ll_event(uint16_t event,uint32_t now)
 }
 void ble_ll_worker(void)
 {
-    unsigned budget=BLE_RX_BACKLOG;
+    /* One control PDU can use decode, dispatch and two one-slot refills.
+     * Keep the old PDU drain capacity; own/pass clocks bound actual work. */
+    unsigned budget=4u*BLE_RX_BACKLOG;
     uint32_t start=ble_port_ticks(),own_start=ble_time_own(),gap=start-ble_link.last_worker,key,item;
+    if(reset.active) return;
     if(live()) {
         ble_link.diag.worker_calls++;
         if(gap>ble_link.diag.worker_gap_ticks) ble_link.diag.worker_gap_ticks=gap;
@@ -395,7 +436,27 @@ void ble_ll_worker(void)
 #endif
     while(budget-- && ble_time_budget() && (uint32_t)(ble_time_own()-own_start)<100u*24u) {
         rx_t local; ble_work_kind_t kind=BLE_WORK_RX;
+        uint16_t opcode=0xffffu; /* unavailable on an unauthenticated control */
         item=ble_time_item_begin();
+        if(queues.refill_pending) {
+            opcode=queues.refill_opcode; queues.refill_pending--;
+            if(live() && !ble_link.peer_stop) ble_port_refill_one();
+            ble_time_item_end(item,BLE_WORK_REFILL,opcode); continue;
+        }
+        if(queues.control_ready) {
+            local=queues.control; queues.control_ready=0; opcode=queues.control_opcode;
+            queues.defer_refill=1;
+            if(live() && !ble_link.peer_stop && local.epoch==ble_link.epoch) {
+                if(local.used>1) {
+                    ble_link.diag.epoch_markers++;
+#if FELUCCA_BLE_STAGE >= 3
+                    security_marker((uint8_t)(local.used-1u));
+#endif
+                } else control(local.data,local.n);
+            }
+            queues.defer_refill=0;
+            ble_time_item_end(item,BLE_WORK_CONTROL,opcode); continue;
+        }
         key=ble_port_lock();
         if(!live() || ble_link.peer_stop || !queues.count) { ble_port_unlock(key); ble_time_item_end(item,kind,0); break; }
         local=queues.rx[queues.r];
@@ -403,23 +464,24 @@ void ble_ll_worker(void)
         queues.r=(uint8_t)((queues.r+1u)%BLE_RX_STREAM); queues.count--;
         if(local.used==1) queues.pdus--;
         ble_port_unlock(key);
-        kind=(local.used>1 || (local.header&3u)==3) ? BLE_WORK_CONTROL : BLE_WORK_RX;
+        kind=(local.used>1 || (local.header&3u)==3) ? BLE_WORK_CONTROL_RX : BLE_WORK_RX;
         if(local.epoch==ble_link.epoch) {
-            if(local.used>1) { ble_link.diag.epoch_markers++;
+            if(local.used>1) opcode=(uint16_t)(0x100u+local.used-1u);
 #if FELUCCA_BLE_STAGE >= 3
-                security_marker((uint8_t)(local.used-1u));
+            else if(!security_receive(&local)) { ble_time_item_end(item,kind,opcode); continue; }
 #endif
-            }
-#if FELUCCA_BLE_STAGE >= 3
-            else if(!security_receive(&local)) { ble_time_item_end(item,kind,0); continue; }
-#endif
-            else if((local.header&3u)==3) control(local.data,local.n);
-            else {
+            if(local.used>1 || (local.header&3u)==3) {
+                /* No later PDU/marker is consumed until dispatch finishes.
+                 * Encryption changes and the first reply's queue insertion
+                 * still share security_control's original critical section. */
+                if(local.used==1 && local.n) opcode=local.data[0];
+                queues.control=local; queues.control_opcode=opcode; queues.control_ready=1;
+            } else {
                 key=ble_port_lock(); queues.host_rx[queues.hw]=local; queues.hw=(uint8_t)((queues.hw+1u)%BLE_RX_BACKLOG);
                 queues.hcount++; ble_port_unlock(key);
             }
         }
-        ble_time_item_end(item,kind,0);
+        ble_time_item_end(item,kind,opcode);
     }
     if(!ble_time_budget()) { ble_port_pend(); goto finish; }
     item=ble_time_item_begin();
@@ -453,12 +515,13 @@ void ble_ll_worker(void)
 finish:
     gap=ble_port_ticks()-start;
     if(gap>ble_link.diag.worker_max_ticks) ble_link.diag.worker_max_ticks=gap;
-    if(queues.count) ble_port_pend();
+    if(queues.count || queues.control_ready || queues.refill_pending) ble_port_pend();
 }
 /* All host data originate here, called only by the executor HCI worker. */
 int ble_ll_poll(uint8_t *type,uint8_t *p,uint16_t *n)
 {
     uint32_t key=ble_port_lock();
+    if(reset.active) { ble_port_unlock(key); return 0; }
 #if FELUCCA_BLE_S31
     /* Acceptance may interrupt immediately before lock acquisition. Observe
      * creation under the lock; never format an event for an unresolved new
@@ -514,8 +577,9 @@ void ble_ll_get_diag(ble_link_diag_t *d)
 }
 int ble_ll_pending(void)
 {
+    if(reset.active) return 0;
     return ble_link.created_pending || ble_link.disconn_pending || ble_link.completed ||
-        (live() && (queues.count || queues.hcount || queues.mc
+        (live() && (queues.count || queues.hcount || queues.mc || queues.control_ready || queues.refill_pending
 #if FELUCCA_BLE_STAGE >= 3
             || security.ltk_event || security.encryption_event || security.reply_pending || security.random_pending
 #endif

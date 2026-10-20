@@ -73,6 +73,9 @@ uint8_t ble_timeline_rx_delayed(ble_timeline_t *t,uint8_t cls,uint32_t stamp,uin
 int ble_missed_step(int fine,uint32_t raw,unsigned phase,int *next,unsigned *drift);
 void ble_ll_init(void);
 void ble_ll_reset(void);
+/* Reset owns the stopped instance until all software slices finish. */
+void ble_ll_reset_begin(void);
+int ble_ll_reset_step(void);
 int ble_ll_create(const ble_conn_t *c,uint32_t now);
 int ble_ll_rx_room(void);
 int ble_ll_rx_marker(uint8_t marker);
@@ -97,6 +100,7 @@ int ble_ll_pending(void);
 uint32_t ble_port_lock(void);
 void ble_port_unlock(uint32_t key);
 void ble_port_refill(void);
+void ble_port_refill_one(void); /* executor item: at most one CCM/load */
 void ble_port_rx_recover(void);
 void ble_port_window(uint32_t us);
 void ble_port_instant(uint8_t kind,uint16_t instant,const ble_conn_t *c);

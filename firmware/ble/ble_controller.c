@@ -19,7 +19,7 @@ static struct {
     command_t q[4];
     unsigned r,w,count;
     ble_host_fn host;
-    uint8_t pub[6],random[6],random_set,masks[2][8],random_pending,start_pending;
+    uint8_t pub[6],random[6],random_set,masks[2][8],random_pending,start_pending,reset_pending;
     ble_adv_t adv;
     ble_diag_t diag;
     uint16_t deferred;
@@ -168,18 +168,38 @@ static void supported(uint8_t *out)
     out[25]|=64;
 #endif
 }
-static void reset_finish(void)
+static void reset_defaults(void)
 {
     uint8_t power=ctl.adv.power;
     uint32_t first=ctl.diag.first_command_ticks,trace_count=ctl.diag.trace_count,drops=ctl.diag.trace_frozen_drops;
     memset(&ctl.diag,0,sizeof ctl.diag);
     ctl.diag.first_command_ticks=first; ctl.diag.trace_count=trace_count; ctl.diag.trace_frozen_drops=drops;
     defaults(); ctl.adv.power=power;
-    ble_port_reset_stats();
+}
+static void reset_step(void)
+{
+    uint32_t item=ble_time_item_begin(); ble_work_kind_t kind=BLE_WORK_RESET_CLEAR;
+    switch(ctl.reset_pending) {
+    case 1:
+        /* Clear timing first, so the later Reset slices remain observable. */
+        kind=BLE_WORK_RESET_STATS; ble_port_reset_stats();
 #if FELUCCA_BLE_STAGE >= 3
-    ble_seed_reset_stats();
+        ble_seed_reset_stats();
 #endif
-    { uint32_t k=ble_port_lock(); ble_ll_reset(); ble_port_unlock(k); }
+        ctl.reset_pending=2; break;
+    case 2: {
+        int rc=ble_port_stop_poll(); kind=BLE_WORK_STOP;
+        if(rc<0) { ctl.reset_pending=0; complete(0x0c03,3,0,0,0); break; }
+        if(rc>0) ctl.reset_pending=3;
+        break;
+    }
+    case 3: if(ble_ll_reset_step()) ctl.reset_pending=4; break;
+    case 4: kind=BLE_WORK_RESET_DEFAULTS; reset_defaults(); ctl.reset_pending=5; break;
+    case 5:
+        kind=BLE_WORK_RESET_COMPLETE; ctl.reset_pending=0; complete(0x0c03,0,0,0,0); break;
+    }
+    ble_time_item_end(item,kind,0x0c03);
+    if(ctl.reset_pending || ctl.count || ctl.overflow_count) ble_port_pend();
 }
 static void command_status(uint16_t opcode,uint8_t status)
 {
@@ -198,11 +218,8 @@ static void execute(const command_t *cmd)
     else if (cmd->data[2]!=expected) status=0x12;
     else switch (op) {
     case 0x0c03: {
-        if (ctl.diag.enabled || ctl.diag.stopping || ble_link.state!=BLE_LINK_IDLE) {
-            uint32_t k=ble_port_lock(); ble_ll_close(0); ble_port_unlock(k);
-            ctl.deferred=op; ctl.diag.stopping=1; ble_port_stop_begin(); return;
-        }
-        reset_finish(); break;
+        uint32_t k=ble_port_lock(); ble_ll_reset_begin(); ble_port_unlock(k);
+        ctl.reset_pending=1; ctl.diag.stopping=1; ble_port_stop_begin(); ble_port_pend(); return;
     }
     case 0x1001:
         data[0]=6; ble_put16(data+1,1); data[3]=6;
@@ -353,6 +370,7 @@ void ble_worker(void)
 {
     uint32_t item;
     if(!ble_time_budget()) { ble_port_pend(); return; }
+    if(ctl.reset_pending) { reset_step(); return; }
 #if FELUCCA_BLE_STAGE >= 3
     ble_entropy_step();
     if(!ble_time_budget()) { ble_port_pend(); return; }
@@ -380,7 +398,6 @@ void ble_worker(void)
         uint16_t op;
         if (!rc) { ble_port_pend(); ble_time_item_end(item,BLE_WORK_STOP,ctl.deferred); return; }
         op=ctl.deferred; ctl.deferred=0; ctl.diag.stopping=0; ctl.diag.enabled=0;
-        if (op==0x0c03 && rc>0) reset_finish();
         complete(op,rc<0 ? 3 : 0,0,0,0);
         if(ctl.count || ctl.overflow_count) ble_port_pend();
         ble_time_item_end(item,BLE_WORK_STOP,op);
@@ -415,7 +432,7 @@ void ble_worker(void)
         execute(&cmd);
         ble_time_item_end(item,ctl.start_pending ? BLE_WORK_ADV_PREP : BLE_WORK_COMMAND,ble_get16(cmd.data));
     }
-    if(ctl.count || ctl.overflow_count || ctl.deferred || ble_ll_pending()) ble_port_pend();
+    if(ctl.count || ctl.overflow_count || ctl.deferred || ctl.reset_pending || ble_ll_pending()) ble_port_pend();
 }
 void ble_driver_start(uint8_t type,const uint8_t *random_addr)
 {

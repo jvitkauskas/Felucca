@@ -8,6 +8,7 @@
 uint32_t ble_port_lock(void) { return 0; }
 void ble_port_unlock(uint32_t k) { (void)k; }
 void ble_port_refill(void) { }
+void ble_port_refill_one(void) { }
 void ble_port_rx_recover(void) { }
 void ble_port_window(uint32_t us) { (void)us; }
 void ble_port_priority(unsigned p) { (void)p; }
@@ -126,7 +127,8 @@ static uint8_t send(uint16_t op,const uint8_t *p,uint8_t n)
     uint8_t packet[254]; uint32_t before=responses;
     ble_put16(packet,op); packet[2]=n; if (n) memcpy(packet+3,p,n);
     assert(!ble_hci_send(1,packet,(uint16_t)(3+n))); memset(packet,0xaa,sizeof packet);
-    ble_worker(); assert(responses==before+1);
+    for(unsigned i=0;i<64 && responses==before;i++) ble_worker();
+    assert(responses==before+1);
     assert(ble_get16(event+3)==op); return event[5];
 }
 static void controller_tests(void)
@@ -172,7 +174,8 @@ static void controller_tests(void)
     ble_worker(); ble_worker(); assert(responses==before);
     ble_worker(); assert(responses==before+1 && !event[5] && ble_get16(event+3)==0x200a);
     ble_worker(); assert(responses==before+1); /* Reset begins its deferred stop. */
-    ble_worker(); assert(responses==before+2 && !event[5] && ble_get16(event+3)==0x0c03);
+    for(i=0;i<64 && responses==before+1;i++) ble_worker();
+    assert(responses==before+2 && !event[5] && ble_get16(event+3)==0x0c03);
     before=responses; start_steps=1;
     assert(!ble_hci_send(1,(uint8_t[]){10,32,1,1},4)); ble_worker(); start_failure=1; ble_worker();
     assert(responses==before+1 && event[5]==3); start_failure=0;
@@ -193,7 +196,9 @@ static void controller_tests(void)
     ble_get_diag(&d); assert(d.overflow==96);
     /* Reset cancels queued work and still answers the accepted command. */
     raw[0]=3; raw[1]=12; assert(!ble_hci_send(1,raw,3)); raw[0]=1; raw[1]=16;
-    assert(!ble_hci_send(1,raw,3)); ble_worker(); assert(!event[5]); ble_worker(); assert(!event[5]);
+    assert(!ble_hci_send(1,raw,3)); before=responses;
+    for(i=0;i<64 && responses<before+2;i++) ble_worker();
+    assert(responses==before+2 && !event[5]);
     assert(!send(0x2008,(uint8_t[32]){0},32));
     /* No public identity: public enable rejected, static random accepted. */
     ble_init((uint8_t[6]){0},host); p[0]=1; assert(send(0x200a,p,1)==0x12);
@@ -206,17 +211,17 @@ static void controller_tests(void)
     /* The internal driver also provisions the configured static random address. */
     ble_init((uint8_t[6]){0},host);
     ble_driver_start(0,(uint8_t[6]){1,2,3,4,5,0xc6});
-    for (i=0;i<20;i++) ble_worker();
+    for (i=0;i<80;i++) ble_worker();
     ble_get_diag(&d); assert(!d.driver_error && d.enabled && air.params.own_type==1);
     /* Hardware failure is visible; no untrimmed advertising. */
     ble_init(pub,host); failure=1; assert(send(0x200a,p,1)==3); failure=0;
     /* Both internal profiles traverse the real H4 dispatcher. */
     ble_init(pub,host); ble_driver_start(0,0);
-    for (i=0;i<20;i++) ble_worker();
+    for (i=0;i<80;i++) ble_worker();
     ble_get_diag(&d);
     assert(!d.driver_error && d.enabled && d.driver_step==14 && air.params.type==0 && air.scan_len==13);
     assert(!memcmp(air.scan+2,"Felucca BLE",11));
-    ble_driver_start(3,0); for (i=0;i<24;i++) ble_worker(); ble_get_diag(&d);
+    ble_driver_start(3,0); for (i=0;i<80;i++) ble_worker(); ble_get_diag(&d);
     assert(!d.driver_error && d.enabled && air.params.type==3 && air.data_len==16);
     /* Atomic trace freeze, wrap, and no reference to overwritten host input. */
     ble_set_host(host); for (i=0;i<300;i++) assert(!send(0x1001,0,0));

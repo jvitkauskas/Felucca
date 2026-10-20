@@ -145,3 +145,31 @@ The downloaded public text and HTML are retained in out/s3.1-core54-hci.*.
     either new direction is saved, then allows NimBLE's 2027. Both real legacy
     and SC tests pass this case, in addition to stale-listed-IRK repeats.
     Store overflow and explicit/absent unpair preserve live encrypted ATT.
+
+## Round 3 / r7 — targeted W_item correction (2026-10-20)
+
+20. **The bench's control opcode was not retained.** r7 04 §0.8 item 4 calls
+    encryption start likely, rather than identifying it. In b242adc SHA steps
+    and session-key AES already have entropy/key item kinds. `control` can
+    instead contain incoming CCM and synchronous two-slot TX refill: 0x06
+    LL_START_ENC_RSP plus waiting 27-byte ACL is three CCM calls, 17 AES blocks.
+    This is a reproducible code-path candidate, not proof of the historical
+    2525-tick sample's opcode. Split all authenticated control dispatch/refill
+    paths and record decoded opcodes; failed MIC uses FFFF, markers 0100 + ID.
+21. **Meaning of statistics reset during resumed Reset.** 03 §2.4 restores
+    statistics, while r7 requires the Reset steps themselves to be measured.
+    Clear timing at the start of resumed work, then count the Reset's own
+    steps, just as the previous monolithic command counted itself after
+    clearing. Do not erase evidence of earlier clear slices at completion.
+    Trace count/frozen-drop and first-command timestamp retain the existing
+    diagnostic provenance behavior. No new specification exception is needed.
+22. **Safe yield boundaries.** 03 §§2.4/11.1 and 02 §8.5.3 define observable
+    completion, ownership, phase and ordering; they do not prescribe item
+    boundaries. Keep a private Reset guard outside cleared state, stop before
+    sliced reclaim, issue CC last, and discard old events. Retain a decoded
+    control ahead of later stream entries. Keep first-encrypted-response
+    insertion and TX enable atomic; defer slot loading with explicit pending
+    executor work, one CCM per slot item. The host wait, peripheral LTK policy
+    and central's existing response timeout are unchanged. No new host wait,
+    timer or relaxed deadline is introduced. The <=70-us injected cost tests
+    demonstrate the scheduling split; <=100 us on silicon still needs F-27.

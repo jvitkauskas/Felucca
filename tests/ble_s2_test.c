@@ -46,7 +46,8 @@ static uint8_t command(uint16_t opcode,const uint8_t *p,unsigned n)
 {
     uint8_t b[35]={0}; unsigned before=count;
     ble_put16(b,opcode); b[2]=(uint8_t)n; if(n) memcpy(b+3,p,n);
-    assert(!ble_hci_send(1,b,(uint16_t)(n+3u))); ble_worker();
+    assert(!ble_hci_send(1,b,(uint16_t)(n+3u)));
+    for(unsigned i=0;i<64 && count==before;i++) ble_worker();
     assert(count>before);
     return events[count-1][events[count-1][0]==15 ? 2 : 5];
 }
@@ -146,7 +147,8 @@ static void r4_ordering(void)
     { uint8_t mask[11]={1,12,8},reset[3]={3,12,0}; unsigned before=count;
       assert(!ble_hci_send(1,mask,sizeof mask)); assert(!ble_hci_send(1,reset,3));
       ble_worker(); assert(count==before+1 && events[count-1][5]==0x0c);
-      ble_worker(); assert(count==before+2 && ble_get16(events[count-1]+3)==0x0c03 && !events[count-1][5]); }
+      for(unsigned i=0;i<64 && count==before+1;i++) ble_worker();
+      assert(count==before+2 && ble_get16(events[count-1]+3)==0x0c03 && !events[count-1][5]); }
 }
 static void controls_and_credits(void)
 {
@@ -298,7 +300,8 @@ static void reset_live(void)
     assert(!ble_hci_send(1,reset,sizeof reset)); ble_worker();
     assert(count==before && ble_link.state==BLE_LINK_CLOSING);
     sim_ack(0); ble_ll_worker(); ble_worker(); assert(count==before);
-    sim_stop_result=1; ble_worker();
+    sim_stop_result=1;
+    for(i=0;i<64 && count==before;i++) ble_worker();
     assert(count==before+1 && events[count-1][0]==14 && ble_get16(events[count-1]+3)==0x0c03 && !events[count-1][5]);
     assert(ble_link.state==BLE_LINK_IDLE && !ble_link.completed && !ble_link.feature_pending && ble_link.epoch!=epoch);
     sim_slot[0]=sim_slot[1]=-1; ble_ll_create(&c,sim_ticks); ble_worker();

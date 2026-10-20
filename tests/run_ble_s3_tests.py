@@ -9,7 +9,7 @@ os.chdir(nb.ROOT)
 s31='--s31' in sys.argv
 out=nb.ROOT/('build/s31-tests' if s31 else 'build/s3-tests');out.mkdir(exist_ok=True,parents=True)
 cc=os.environ.get('CC','cc')
-common=['-DBLE_HOST_TEST=1','-DFELUCCA_BLE_STAGE=3','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-fsanitize=address,undefined','-fno-omit-frame-pointer','-fno-pie']
+common=['-DBLE_HOST_TEST=1','-DFELUCCA_BLE_STAGE=3','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-fno-builtin-memset','-fno-builtin-memcpy','-fsanitize=address,undefined','-fno-omit-frame-pointer','-fno-pie']
 if s31: common+=['-DFELUCCA_BLE_S31=1']
 def compile(p,flags=()):
     obj=out/(str(p).replace('/','_')+'.o')
@@ -18,7 +18,7 @@ def compile(p,flags=()):
 def run(name,objects,args=()):
     exe=out/name
     subprocess.run([cc,'-no-pie','-fsanitize=address,undefined','-Wl,--gc-sections',
-                    '-Wl,--wrap=tc_sha256_update,--wrap=tc_sha256_final',*map(str,objects),'-o',str(exe)],check=True)
+                    '-Wl,--wrap=tc_sha256_update,--wrap=tc_sha256_final,--wrap=memset,--wrap=memcpy,--wrap=ble_secure_zero',*map(str,objects),'-o',str(exe)],check=True)
     subprocess.run([str(exe),*args],check=True)
 base=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_logic','ble_controller','ble_link_logic','ble_link','ble_midi','ble_heap','ble_crypto','ble_seed','ble_bonds','ble_timing','ble_privacy')]
 sim=[compile(Path('tests')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_s2_sim','ble_s3_sim')]
@@ -29,5 +29,6 @@ run('s2-regression',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s2_integra
 integration=compile(Path('tests/ble_s3_integration.c'),nb.flags(vendor=False))
 if s31:
     run('privacy-store-timing', [*base,*sim,*vendor,*port,compile(Path('tests/ble_s31_test.c'),nb.flags(vendor=False))])
+    run('resumable-steps', [*base,*sim,*vendor,*port,compile(Path('tests/ble_s31_steps.c'),nb.flags(vendor=False))])
 for mode in (('legacy','sc','rpa','repeat-legacy','repeat-sc') if s31 else ('legacy','sc')):
     run('pairing-'+mode,[*base,*sim,*vendor,*port,integration],[mode])

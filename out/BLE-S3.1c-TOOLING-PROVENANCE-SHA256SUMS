@@ -1,0 +1,8 @@
+5d26aeae66fc6f9cb969df50a2382536208f94dec476dd17239924e34550f33d  /root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/__stddef_max_align_t.h
+bf25c7d82a41beee3f258c44664eeb179366222baa9dd2402d04b9d06620347f  /root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/limits.h
+a8b8b524c68f7241d2c3def2547a52dd0dd56dcbba33b2a1af0b70d75e2da8e3  /root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/stdbool.h
+4fe29f8d1e821017f3cfc5dd56ba39160d7629a49f049e39aef8ffeeec008a60  /root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/stddef.h
+021dc659a6bfd1c0bcaa99549946e628b523847a680fd43e5804523c8f5a0103  /root/felucca-ble-env/jieli/jieli-linux-toolchains-20260730.1/common/lib/clang/4.0.1/include/stdint.h
+41167491bffed4651750719c973d2758adeb9021a5670d02d6a53c85ed80ea7d  /root/felucca-ble-env/sdk-min/cpu/wl82/tools/cfg/eq_cfg_hw.bin
+276579954f076886a6a7694f65dc71c034a63a2c204b76749065c0ac7b010d1b  /root/felucca-ble-env/sdk-min/cpu/wl82/tools/cfg_tool.bin
+4e3b4c220dc96641cb5a723f41e68ce41d5261ae9434bb33fbd7f2c59976ded4  /root/felucca-ble-env/sdk-min/cpu/wl82/tools/uboot.boot

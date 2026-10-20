@@ -106,10 +106,10 @@ static void bb_map(const uint8_t *map)
     BB_F16(BF_CHMAP)=ble_get16(map); BB_F16(BF_CHMAP+2)=ble_get16(map+2);
     BB_F16(BF_CHMAP+4)=(uint16_t)((n<<5)|(map[4]&31u)); br_sync();
 }
-static void bb_refill(void)
+static void bb_refill_limit(unsigned limit)
 {
     uint32_t k=fm1_ble_irq_save(),start=fm1_ticks(),ccm_before=ble_time_ccm_total();
-    unsigned a,b,j,first,tries=0;
+    unsigned a,b,j,first,tries=0,loads=0;
     if(bb.refill_busy || (bb.state!=4 && bb.state!=2)) { fm1_ble_irq_restore(k); return; }
     bb.refill_busy=1;
     do {
@@ -128,6 +128,7 @@ static void bb_refill(void)
 #endif
         if(bb.tx_id[slot]>=0) { id=bb.tx_id[slot]; bb.tx_id[slot]=-1; ble_ll_tx_ack((unsigned)id); }
         if(bb.state!=4 || ble_link.state>=BLE_LINK_CLOSING) continue;
+        if(loads==limit) continue;
         id=ble_ll_tx_pick();
         if(id<0) { BB_F16(BF_FLOW)&=(uint16_t)~64u; continue; }
         n=ble_ll_tx_len((unsigned)id); llid=ble_ll_tx_llid((unsigned)id); md=(unsigned)ble_ll_acl_waiting();
@@ -141,11 +142,13 @@ static void bb_refill(void)
         BB_F16(BF_TX_DATA+slot*2)=(uint16_t)((BB_F16(BF_TX_DATA+slot*2)&4u)|((uint16_t)n<<8)|(md<<3)|llid);
         BB_F16(BF_FLOW)=(uint16_t)((BB_F16(BF_FLOW)&~64u)|(md<<6));
         bb.tx_id[slot]=(int8_t)id; br_sync(); BB_F8(BF_TX_CTL+slot)&=(uint8_t)~1u; br_sync();
+        loads++;
     }
     bb.refill_busy=0;
     ble_time_refill_end(start,ccm_before);
     fm1_ble_irq_restore(k);
 }
+static void bb_refill(void) { bb_refill_limit(2); }
 static void bb_connection(const ble_conn_t *c,uint8_t header,uint32_t now)
 {
     if(!ble_ll_create(c,now)) { br_diag.connect_ignored++; return; }

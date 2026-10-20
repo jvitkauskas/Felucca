@@ -53,7 +53,7 @@ static void security_marker(uint8_t marker)
         if(security.d.phase!=BLE_ENC_PA) { security_auth_failure(0); return; }
         security.d.rx_on=0; security.d.rx_counter=0; security.d.phase=BLE_ENC_PB; break;
     case BLE_MARK_REJECT_ACK:
-        if(security.rejecting) { security.rejecting=0; security.d.phase=BLE_ENC_N; ble_port_refill(); }
+        if(security.rejecting) { security.rejecting=0; security.d.phase=BLE_ENC_N; tx_refill(); }
         break;
     default: security_auth_failure(0); break;
     }

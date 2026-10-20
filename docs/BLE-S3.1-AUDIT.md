@@ -1,5 +1,69 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
-# S3.1b round-2 clean-room audit — frozen r6
+# S3.1c round-3 clean-room audit — frozen r7
+
+2026-10-20. Worktree `/root/fm1/Felucca-ble`, branch `ble-controller`,
+uncommitted above c5973a1; round-2 implementation b242adc. No agents were
+spawned. Commands used the explicit permitted repository or r7 snapshot
+workdir. The supplied toolchain-workspace cwd was not inspected or used.
+No devices, flashing, device-network access, commit or push operation occurred.
+
+The required `out/BLE-S3.1b-BENCH-R1.txt` was read before implementation. It
+supplies the Reset/control timing failures and F-24/F-28 baseline, not new
+S3.1c measurements. Controller references this round were r7 and the permitted
+repository, including its open vendored NimBLE/TinyCrypt and retained reports.
+No live/older specification, trace/reconstruction/patch tree, vendor controller
+binary/library/object/IR, or additional SDK/app-re input was opened. Paths
+mentioned in historical documents/manifests were not followed.
+
+## Round-3 inputs and outputs
+
+`tools/ble_s31_audit.py` now names **r7 only**. It hashes seven snapshot files,
+local source/docs/tests/tools, retained public Core HCI text/HTML, and the
+round-2 bench record. It checks the local 152 NimBLE/TinyCrypt import hashes
+without visiting their historical external origins. Public Core artifacts are
+retained inputs; no new external document or internet download was needed.
+No upstream source, spec file, version/feature advertisement or licence changed.
+
+`out/BLE-S3.1c-INPUT-SHA256SUMS`,
+`out/BLE-S3.1c-TOOLING-PROVENANCE-SHA256SUMS`,
+`out/BLE-S3.1c-CHANGED-FILES.txt`,
+`out/BLE-S3.1c-ARTIFACT-SHA256SUMS` and `out/ble-s3.1c-audit.log` retain the
+current evidence. Historical output manifests remain intact. Inventory paths
+must resolve within the repository; build/out are excluded except the named
+input records. Hashing an inventory does not claim every file was consulted.
+
+Builds use the same existing pinned compiler/linker/objcopy/objdump and
+sdk-min packaging dependencies as round 2; the three Apache-licensed package
+asset hashes are checked by the existing builder. These are opaque execution/
+packaging dependencies, not controller implementation references. No vendor
+controller code is linked. Historical tool fingerprints are carried forward
+from the round-2 manifest, not claimed independently revalidated. Inspected
+ELF/disassembly output is this open firmware and its open dependencies only.
+
+Full S1 (both options), S2, S3 and S3.1 suites pass with ASan/UBSan and warnings
+as errors; logs use `out/ble-s3.1c-{s1,s2,s3}-tests.log` and
+`out/ble-s3.1c-tests.log`. The inherited TinyCrypt AES shift-base-only exception
+remains. Test-only SHA/memory wrappers and simulated AES costs do not enter
+target builds. Reset interruption, busy-stop ownership, stale events, seed/
+identity/power persistence, opcode/MIC attribution and stream/barrier/counter
+ordering are exercised along with real pinned-host F-24/F-28 regressions.
+
+Target options stage 2, stage 3 and stage 3/S3.1 pass, including capacity,
+DMA, RAM-code and HAL-only MMIO guards. The DSP budget comparison passes.
+Image `out/felucca-ble-s3.1c.fwsc` has SHA256
+`c287bfe52f2ba203ddc1cc89cebc30777ffd5e9d860d61dcd77c84c2f2d2d800`;
+layout is in `out/BLE-S3.1C-BUILD.txt`. No image has been flashed this round.
+
+The 2525-tick historical control opcode cannot be recovered. A reproducible
+0x06 path has three CCM calls / 17 AES blocks before the split. New injected
+models bound Reset at 48 us and control/refill at 60.167 us; these do not
+establish physical target timing. The per-kind/opcode bench checklist and
+remaining F-27/F-24/F-28 qualification are in `docs/BLE-S3.1.md`; r7 choices
+are appended to `docs/SPEC-GAPS-S3.1.md`.
+
+## Archived round-2 / r6 audit
+
+The following describes round 2 and its historical read set and artifacts.
 
 2026-10-20. Worktree `/root/fm1/Felucca-ble`, branch `ble-controller`,
 uncommitted above ee63586; round-1 code 94eb8a8. No agents were spawned. All

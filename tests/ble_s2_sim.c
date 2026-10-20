@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include <string.h>
 #include "ble_s2_sim.h"
+#include "../firmware/ble/ble_timing.h"
 #if FELUCCA_BLE_STAGE >= 3
 #include "../firmware/ble/ble_security.h"
 uint8_t sim_air[2][31],sim_air_len[2];
@@ -9,8 +10,9 @@ uint32_t sim_ticks,sim_starts,sim_stops,sim_windows,sim_applies;
 int sim_executor_enabled;
 void (*sim_lock_hook)(void);
 int sim_stop_result=1,sim_slot[2]={-1,-1},sim_latency_enabled;
+int sim_start_steps,sim_start_failure;
 ble_adv_t sim_advertising;
-static int refilling;
+static int refilling,stopping;
 static uint32_t clock_last,clock_ms,clock_fraction;
 uint32_t ble_port_ticks(void) { return sim_ticks; }
 uint32_t ble_port_ms(void)
@@ -21,31 +23,43 @@ uint32_t ble_port_ms(void)
     if(clock_fraction>=24000u) { clock_fraction-=24000u; clock_ms++; }
     return clock_ms;
 }
-int ble_port_start(const ble_adv_t *adv) { sim_advertising=*adv; sim_starts++; return 0; }
+int ble_port_start(const ble_adv_t *adv)
+{
+    if(sim_start_failure) return -1;
+    if(sim_start_steps) { sim_start_steps--; return 1; }
+    sim_advertising=*adv; sim_starts++; return 0;
+}
 void ble_port_update(const ble_adv_t *adv) { sim_advertising=*adv; }
-void ble_port_stop_begin(void) { sim_stops++; }
-int ble_port_stop_poll(void) { return sim_stop_result; }
+void ble_port_stop_begin(void) { sim_stops++; stopping=1; }
+int ble_port_stop_poll(void)
+{
+    if(stopping && sim_stop_result>0) { sim_slot[0]=sim_slot[1]=-1; stopping=0; }
+    return sim_stop_result;
+}
 int ble_port_failed(void) { return sim_stop_result<0; }
-void ble_port_reset_stats(void) { }
+void ble_port_reset_stats(void) { ble_time_reset(); }
 uint32_t ble_port_lock(void)
 {
     if(sim_lock_hook) { void (*hook)(void)=sim_lock_hook; sim_lock_hook=0; hook(); }
     return 0;
 }
 void ble_port_unlock(uint32_t key) { (void)key; }
-void ble_port_refill(void)
+static void refill(unsigned limit)
 {
     unsigned i;
     if(refilling) return;
     refilling=1;
-    for(i=0;i<2;i++) if(sim_slot[i]<0) {
+    for(i=0;i<2 && limit;i++) if(sim_slot[i]<0) {
         sim_slot[i]=ble_ll_tx_pick();
+        if(sim_slot[i]>=0) limit--;
 #if FELUCCA_BLE_STAGE >= 3
         if(sim_slot[i]>=0 && !ble_ll_tx_prepare((unsigned)sim_slot[i],sim_air[i],&sim_air_len[i])) sim_slot[i]=-1;
 #endif
     }
     refilling=0;
 }
+void ble_port_refill(void) { refill(2); }
+void ble_port_refill_one(void) { refill(1); }
 void ble_port_rx_recover(void) { }
 void ble_port_window(uint32_t us) { sim_windows=us; }
 void ble_port_instant(uint8_t kind,uint16_t instant,const ble_conn_t *c) { (void)kind; (void)instant; (void)c; }
@@ -70,7 +84,8 @@ void sim_ack(unsigned slot)
 void sim_reset(void)
 {
     sim_ticks=24000; clock_last=sim_ticks; clock_ms=1; clock_fraction=0; sim_starts=sim_stops=sim_windows=sim_applies=0;
-    sim_stop_result=1; sim_latency_enabled=0; sim_slot[0]=sim_slot[1]=-1; refilling=0; sim_lock_hook=0; ble_ll_init();
+    sim_stop_result=1; sim_start_steps=sim_start_failure=0; stopping=0;
+    sim_latency_enabled=0; sim_slot[0]=sim_slot[1]=-1; refilling=0; sim_lock_hook=0; ble_ll_init();
 }
 ble_conn_t sim_connection(void)
 {

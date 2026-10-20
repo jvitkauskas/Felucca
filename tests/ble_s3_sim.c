@@ -11,6 +11,22 @@ int sim_flash_fault,sim_flash_idle=1,sim_flash_mismatch,sim_aes_fault;
 unsigned sim_erases[3],sim_programs[3];
 static struct tc_aes_key_sched_struct aes;
 uint32_t sim_sha_compressions,sim_sha_cost_ticks;
+uint32_t sim_aes_blocks,sim_aes_cost_ticks,sim_memory_cost_ticks;
+void *__real_memset(void *,int,size_t);
+void *__real_memcpy(void *,const void *,size_t);
+void __real_ble_secure_zero(void *,unsigned);
+void *__wrap_memset(void *p,int value,size_t n)
+{
+    void *out=__real_memset(p,value,n); sim_ticks+=(uint32_t)n*sim_memory_cost_ticks; return out;
+}
+void *__wrap_memcpy(void *p,const void *s,size_t n)
+{
+    void *out=__real_memcpy(p,s,n); sim_ticks+=(uint32_t)n*sim_memory_cost_ticks; return out;
+}
+void __wrap_ble_secure_zero(void *p,unsigned n)
+{
+    __real_ble_secure_zero(p,n); sim_ticks+=n*sim_memory_cost_ticks;
+}
 int __real_tc_sha256_update(TCSha256State_t s,const uint8_t *p,size_t n);
 int __real_tc_sha256_final(uint8_t *p,TCSha256State_t s);
 int __wrap_tc_sha256_update(TCSha256State_t s,const uint8_t *p,size_t n)
@@ -25,8 +41,21 @@ int __wrap_tc_sha256_final(uint8_t *p,TCSha256State_t s)
     int rc=__real_tc_sha256_final(p,s);
     sim_sha_compressions+=blocks; sim_ticks+=blocks*sim_sha_cost_ticks; return rc;
 }
-int ble_port_aes_begin(const uint8_t key[16]) { return !sim_aes_fault && tc_aes128_set_encrypt_key(&aes,key); }
-int ble_port_aes_block(const uint8_t in[16],uint8_t out[16]) { return !sim_aes_fault && tc_aes_encrypt(out,in,&aes); }
+int ble_port_aes_begin(const uint8_t key[16])
+{
+    uint32_t cost=sim_memory_cost_ticks; int rc;
+    sim_memory_cost_ticks=0; rc=!sim_aes_fault && tc_aes128_set_encrypt_key(&aes,key);
+    sim_memory_cost_ticks=cost; return rc;
+}
+int ble_port_aes_block(const uint8_t in[16],uint8_t out[16])
+{
+    uint32_t cost=sim_memory_cost_ticks; int rc;
+    sim_aes_blocks++; sim_ticks+=sim_aes_cost_ticks;
+    /* TinyCrypt simulates the AES peripheral. Its internal software copies
+     * are not CPU work in the target driver; charge the block once. */
+    sim_memory_cost_ticks=0; rc=!sim_aes_fault && tc_aes_encrypt(out,in,&aes);
+    sim_memory_cost_ticks=cost; return rc;
+}
 void ble_port_aes_end(void) { }
 int ble_port_storage_idle(void) { return sim_flash_idle && ble_link.state==BLE_LINK_IDLE; }
 int ble_port_flash_read(uint32_t off,uint8_t *out,uint32_t n)

@@ -66,7 +66,8 @@ const char *ble_time_kind_name(unsigned kind)
 {
     static const char *const names[BLE_WORK_COUNT]={"service","key","rx","control",
         "housekeep","delivery","resolution","driver","command","stop","adv_prepare",
-        "entropy_sample","entropy_reseed","entropy_output","entropy_rekey"};
+        "entropy_sample","entropy_reseed","entropy_output","entropy_rekey",
+        "control_rx","refill","reset_clear","reset_defaults","reset_stats","reset_complete"};
     return kind<BLE_WORK_COUNT ? names[kind] : "unknown";
 }
 void ble_time_ccm_add(uint32_t ticks) { uint32_t k=ble_port_lock(); tm.ccm+=ticks; ble_port_unlock(k); }
