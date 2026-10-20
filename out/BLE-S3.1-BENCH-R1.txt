@@ -1,0 +1,48 @@
+BLE S3.1 bench, round 1 - 2026-10-20 evening
+Image: out/felucca-ble-s3.1.fwsc sha256 317a0d96e791bac9dc7826d50e68584b81467732fea3ad2b5e24336c9867237d
+(flashed over S3, 0x04000-0x84FFF written, CRC verified; backup ~/backups/fm1-20261020-200609.bin).
+Centrals: HONOR Magic V3 / Android 16 (RPA, identity 44:90:46:83:9A:6F), desktop BlueZ E8:BF:B8:9C:77:40.
+Desktop adapter powered off during phone runs. Phone driven by adb; MIDI apps from android-midisuite.
+
+RESULT: F-24 PASS (HCI Reset + 4 RPA cycles + power cycle); bonds survive compaction (F-25 partly);
+        NEW BUG: re-pairing a peer whose stale IRK is in the resolving list fails (Confirm Value Failed).
+
+Boot (from S3 data): seed CHAINED seq 6; 7 bond records loaded; bond_private_dropped 1 (S3's RPA-keyed CCCD);
+  rl_entries 2 (local + old phone IRK), rl_enabled 1; executor_selftest 1, error 0.
+
+BUG (spec r5 fallback, 03 3.6 item 2): the phone had forgotten the bond; the FM-1 still had it.
+  The phone's new RPA resolved to the old identity (rl_matches 1); the legacy LE Connection Complete then
+  carried the identity (type 0x00) and no RPA, so NimBLE took the identity as the peer's over-the-air
+  address. The phone started a fresh pairing; the phone reported SMP Confirm Value Failed
+  (pair_last_status 1028 = peer error 0x04). Pairing functions (legacy c1; SC f5/f6) hash the
+  over-the-air addresses, so the host needs the RPA as well. NimBLE deleted the stale bond (records 7->4)
+  but the resolving-list entry stayed (rl_entries 2) until `ble host` (resync/HCI Reset) rebuilt the list.
+  -> the host must get the peer RPA: LE Enhanced Connection Complete (unmasked by the host) is the
+     Core-conformant carrier. Also check that bond deletion sends 2028 (the entry outlived the bond).
+
+PASS  fresh pairing after the resync: unresolved RPA, legacy Just Works again (method 1, now reported
+      correctly from the identity's record), key 16, identity known, 2027 added (rl_entries 2).
+      Android shows two consent prompts (at 4 s and 7 s). B23 reproduces: Android 16 chooses legacy.
+PASS  F-24 HCI Reset variant: bond flushed, `ble host`, phone Bluetooth toggled (new RPA), reconnect:
+      rl_matches 1, LTK reply (ltk_negative 0), encrypted, no prompt, subscribed.
+PASS  F-24 4 more cycles with new RPAs: rl_attempts 5 / rl_matches 5 / unresolved 0, enc_starts 5,
+      ltk_negative 0, mic_failures 0, no prompt.
+PASS  BLE-MIDI both ways on the resolved link: 8 keys -> midi_packets_in 16, echoed out 16, all 16 in MIDI Scope.
+PASS  F-24 power-cycle variant: seed seq 7, 8 records loaded, rl_entries 2; new RPA resolved, encrypted,
+      no prompt, pair_failures 0.
+PASS  desktop bond after compaction (bond_erases 1) and power cycle: bluetoothctl connect -> encrypted,
+      SC (method 2), no pairing, subscribed; desktop public address, no resolution attempt.
+
+Timing (6 phone sessions, before the power cycle):
+  dispatch max 578 us, negatives 0                                 PASS (fix works)
+  executor wall max 847 us; own max 266 us; own_over_250 5; over_250_plus_item 0   PASS (r5 rule)
+  executor item max 226 us, item_over_100us 15 (boot alone: 164 us, 2)             FAIL W_item <= 100 us
+    (counters do not name the item; candidates: pairing/host delivery, bond flush prep, K-11/AES at boot)
+  refill max 59 us = CCM 29 + other 30; over_80 0                  PASS
+  worker_timer_max_gap 3401 us (bond flash write/erase, no link up)  INFO
+Bond store: bond_erases 1 (first compaction), bond_private_refused 1 (an RPA-keyed write refused),
+  orphan_dropped 0, equal_writes_skipped 0, failures 0.
+A9 reproduces systematically: each phone app kill ended the link with 0x08 (supervision timeout) at the FM-1.
+
+NOT RUN: F-26 (consent delays), F-27 full (10 min at 15/7.5 ms with audio), F-25 40-session churn,
+H-22..H-25 on air (scriptable central), sniffer items A9/B23/B24/S-13.
