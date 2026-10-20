@@ -1,0 +1,9 @@
+.{"label": "fixture wrap", "seconds": 15, "event_delta": 1000, "serviced_delta": 1000, "measured_ms": 15.0, "expected_ms": 15.0, "epoch": 2}
+{"label": "fixture must fail", "seconds": 15, "event_delta": 0, "serviced_delta": 1000, "measured_ms": Infinity, "expected_ms": 15.0, "epoch": 2}
+{"label": "fixture must fail", "seconds": 15, "event_delta": 5036, "serviced_delta": 1000, "measured_ms": 2.9785544082605244, "expected_ms": 15.0, "epoch": 2}
+.desktop Update Complete 00: 7.5 ms
+.
+----------------------------------------------------------------------
+Ran 3 tests in 0.004s
+
+OK

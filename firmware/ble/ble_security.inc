@@ -70,7 +70,7 @@ static int security_receive_inner(rx_t *r)
     }
     if(!r->n || !llid) {
         if(security.d.phase!=BLE_ENC_N) return security_auth_failure(0);
-        ble_link.diag.ignored++; return 0;
+        control_ignore(0xff,BLE_IGNORE_RESERVED,r->event); return 0;
     }
     if(security.d.phase==BLE_ENC_N) return 1;
     if(llid!=3) return security_auth_failure(0);
@@ -103,11 +103,11 @@ static void security_reject(uint8_t error)
     security.rejecting=1;
     if(tx_queue(p,2,3,0)<0) ble_ll_close(0x1f);
 }
-static int security_control(const uint8_t *p,uint8_t n)
+static int security_control(const uint8_t *p,uint8_t n,uint16_t received)
 {
     uint8_t reply[13]={0}; uint32_t key;
     if(p[0]==3 && n==23) {
-        if(security.d.phase==BLE_ENC_N && security.d.rx_on) { ble_link.diag.ignored++; return 1; }
+        if(security.d.phase==BLE_ENC_N && security.d.rx_on) { control_ignore(p[0],BLE_IGNORE_ENCRYPTED,received); return 1; }
         if(security.d.phase!=BLE_ENC_N && security.d.phase!=BLE_ENC_PC) return security_auth_failure(0),1;
         security.d.phase=BLE_ENC_S1; security.rejecting=0;
         memcpy(security.request,p+1,10); memcpy(security.skd,p+11,8); memcpy(security.iv,p+19,4);
@@ -126,7 +126,7 @@ static int security_control(const uint8_t *p,uint8_t n)
         ble_port_unlock(key); return 1;
     }
     if(p[0]==10 && n==1) {
-        if(security.d.phase!=BLE_ENC_N || !security.d.rx_on) { ble_link.diag.ignored++; return 1; }
+        if(security.d.phase!=BLE_ENC_N || !security.d.rx_on) { control_ignore(p[0],BLE_IGNORE_UNEXPECTED,received); return 1; }
         security.d.phase=BLE_ENC_PA; reply[0]=11;
         if(tx_queue(reply,1,3,0)<0) ble_ll_close(0x1f);
         return 1;

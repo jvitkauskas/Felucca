@@ -158,8 +158,9 @@ static void bb_connection(const ble_conn_t *c,uint8_t header,uint32_t now)
     for(slot=0;slot<2;slot++) {
         BB_F16(BF_TX_ADV+slot*2)=(uint16_t)(((header>>7)&1u)<<4);
         BB_F16(BF_TX_DATA+slot*2)=(uint16_t)(((slot==0 ? t : !t)<<2)|1u);
-        bb.tx_id[slot]=-1;
+        bb.tx_id[slot]=-1; bb.rx_delayed[slot]=0;
     }
+    bb.refill_busy=0;
     BB_F16(BF_PRIO_CTRL)=28; BB_F16(BF_PRIO_STAT)=28;
     BB_F16(0)=0x8000; BB_F16(BF_TX_TOGGLE)&=(uint16_t)~2u; BB_F16(BF_RX_TOGGLE)=0;
     BB_F16(10)=(uint16_t)c->aa; BB_F16(12)=(uint16_t)(c->aa>>16);
@@ -369,7 +370,7 @@ static void fm1_ble_event_body(void)
         BR_R(0x2802cu)=1;
         if(bb.state==4) {
             uint16_t event=BB_F16(BF_EVT); uint32_t now=fm1_ticks();
-            if((int32_t)(now-ble_link.time.first)>=0) {
+            if(ble_link.closed_valid || (int32_t)(now-ble_link.time.first)>=0) {
                 ble_ll_event(event,now);
                 if(bb.state==4 && ble_link.state<BLE_LINK_CLOSING) {
                     if(ble_link.rx_seen) {

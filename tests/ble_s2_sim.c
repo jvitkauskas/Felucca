@@ -7,6 +7,10 @@
 uint8_t sim_air[2][31],sim_air_len[2];
 #endif
 uint32_t sim_ticks,sim_starts,sim_stops,sim_windows,sim_applies;
+ble_conn_t sim_applied;
+uint8_t sim_apply_kind;
+uint16_t sim_apply_event,sim_registered_instant;
+uint32_t sim_apply_ticks;
 int sim_executor_enabled;
 void (*sim_lock_hook)(void);
 int sim_stop_result=1,sim_slot[2]={-1,-1},sim_latency_enabled;
@@ -62,8 +66,12 @@ void ble_port_refill(void) { refill(2); }
 void ble_port_refill_one(void) { refill(1); }
 void ble_port_rx_recover(void) { }
 void ble_port_window(uint32_t us) { sim_windows=us; }
-void ble_port_instant(uint8_t kind,uint16_t instant,const ble_conn_t *c) { (void)kind; (void)instant; (void)c; }
-void ble_port_apply(uint8_t kind,const ble_conn_t *c,uint16_t w,uint32_t win) { (void)kind; (void)c; (void)w; sim_windows=win; sim_applies++; }
+void ble_port_instant(uint8_t kind,uint16_t instant,const ble_conn_t *c) { (void)kind; (void)c; sim_registered_instant=instant; }
+void ble_port_apply(uint8_t kind,const ble_conn_t *c,uint16_t w,uint32_t win)
+{
+    (void)w; sim_applied=*c; sim_apply_kind=kind; sim_apply_event=ble_link.closed_n;
+    sim_apply_ticks=sim_ticks; sim_windows=win; sim_applies++;
+}
 void ble_port_latency(uint16_t latency,int enabled) { sim_latency_enabled=enabled && latency; }
 void ble_port_priority(unsigned priority) { (void)priority; }
 void ble_port_pend(void) { }
@@ -86,6 +94,8 @@ void sim_reset(void)
     sim_ticks=24000; clock_last=sim_ticks; clock_ms=1; clock_fraction=0; sim_starts=sim_stops=sim_windows=sim_applies=0;
     sim_stop_result=1; sim_start_steps=sim_start_failure=0; stopping=0;
     sim_latency_enabled=0; sim_slot[0]=sim_slot[1]=-1; refilling=0; sim_lock_hook=0; ble_ll_init();
+    memset(&sim_applied,0,sizeof sim_applied); sim_apply_kind=0;
+    sim_apply_event=sim_registered_instant=0; sim_apply_ticks=0;
 }
 ble_conn_t sim_connection(void)
 {

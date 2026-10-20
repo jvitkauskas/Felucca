@@ -31,6 +31,21 @@ typedef struct {
     uint16_t timeout,new_timeout;
     uint8_t established,win_pending;
 } ble_timeline_t;
+enum {
+    BLE_IGNORE_NONE, BLE_IGNORE_LENGTH, BLE_IGNORE_PARAMS, BLE_IGNORE_MAP,
+    BLE_IGNORE_PENDING, BLE_IGNORE_ROLE, BLE_IGNORE_UNEXPECTED,
+    BLE_IGNORE_VERSION, BLE_IGNORE_RESERVED, BLE_IGNORE_ENCRYPTED,
+    BLE_IGNORE_COUNT
+};
+enum {
+    BLE_UPDATE_EMPTY, BLE_UPDATE_PENDING, BLE_UPDATE_PROGRAMMED, BLE_UPDATE_APPLIED,
+    BLE_UPDATE_INVALID, BLE_UPDATE_BUSY, BLE_UPDATE_LATE, BLE_UPDATE_CLOSED
+};
+typedef struct {
+    uint32_t serial,epoch;
+    uint16_t old_interval,new_interval,offset,instant,received;
+    uint8_t win,outcome,reason;
+} ble_update_diag_t;
 typedef struct {
     uint32_t epoch,created,accepted,invalid,events,rx_class[4],repetitions,rx_backpressure;
     uint32_t acl_in,acl_out,acl_rejected,acknowledged,ncp,flushed,ctrl_drop,ignored;
@@ -39,17 +54,24 @@ typedef struct {
     uint32_t epoch_markers;
     uint16_t interval,latency,timeout,event,rx_used,tx_used,rx_peak;
     uint8_t state,established,reason,peer_features[8];
+    uint32_t ignore_reasons[BLE_IGNORE_COUNT],update_serial;
+    ble_update_diag_t update[4];
+    ble_conn_t pending;
+    uint16_t instant,received,ignored_event;
+    uint8_t instant_kind,programmed,ignored_opcode,ignored_reason;
 } ble_link_diag_t;
 /* Single core: all functions except the pure helpers need the port's short
  * nesting-safe critical section. No function here calls a host. */
 extern struct ble_link {
+    /* Everything after epoch is connection-local; create clears it in full. */
+    ble_link_diag_t diag;
+    uint32_t epoch;
     ble_conn_t conn,pending;
     ble_timeline_t time;
-    ble_link_diag_t diag;
-    uint32_t epoch,last_worker,anchor,feature_deadline,terminate_deadline,instant_time,created_at;
-    uint16_t anchor_event,closed_n,instant,widen,window,acc;
+    uint32_t last_worker,anchor,feature_deadline,terminate_deadline,instant_time,created_at,pending_serial;
+    uint16_t anchor_event,closed_n,instant,instant_received,widen,window,acc;
     uint8_t state,closed_valid,rx_seen,valid_seen,first_switch,hold,priority,invalid_events,anchor_seen;
-    uint8_t instant_kind,instant_programmed,peer_stop,reason,local_terminate;
+    uint8_t instant_kind,instant_programmed,instant_timed,peer_stop,reason,local_terminate;
     uint8_t created_pending,disconn_pending,feature_pending,features_known,version_sent;
     uint8_t features[8],features_ready,features_status,update_pending,peer_version[5],version_known;
     uint16_t completed;

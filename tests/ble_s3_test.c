@@ -40,7 +40,7 @@ static uint8_t hci(uint16_t op,const uint8_t *p,unsigned n)
 {
     uint8_t command[35]; ble_put16(command,op); command[2]=(uint8_t)n; if(n) memcpy(command+3,p,n);
     hci_n=0; assert(!ble_hci_send(1,command,(uint16_t)(n+3u)));
-    for(unsigned i=0;i<32 && !hci_n;i++) { ble_ll_worker(); ble_worker(); }
+    for(unsigned i=0;i<64 && !hci_n;i++) { ble_ll_worker(); ble_worker(); }
     assert(hci_event[0]==14 && ble_get16(hci_event+3)==op); return hci_event[5];
 }
 static void hci_crypto(void)

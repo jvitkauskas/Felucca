@@ -27,7 +27,7 @@ static uint8_t hci(uint16_t op,const void *p,unsigned n)
     uint8_t b[80]; unsigned i,count=reply_count;
     ble_put16(b,op); b[2]=(uint8_t)n; if(n) memcpy(b+3,p,n);
     assert(!ble_hci_send(1,b,(uint16_t)(n+3u)));
-    for(i=0;i<32 && count==reply_count;i++) ble_worker();
+    for(i=0;i<64 && count==reply_count;i++) ble_worker();
     assert(reply_count==count+1 && ble_get16(reply+3)==op); return reply[5];
 }
 static void masks(int enhanced)

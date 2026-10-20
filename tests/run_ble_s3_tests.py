@@ -26,6 +26,7 @@ vendor=[compile(p,[*nb.flags(),"-Wno-old-style-declaration",*(['-fno-sanitize=sh
 port=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_npl','ble_host')]
 run('logic',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s3_test.c'),nb.flags(vendor=False))])
 run('s2-regression',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s2_integration.c'),nb.flags(vendor=False))])
+run('connection-updates', [*base,*sim,*vendor,*port,compile(Path('tests/ble_conn_update_test.c'),nb.flags(vendor=False))])
 integration=compile(Path('tests/ble_s3_integration.c'),nb.flags(vendor=False))
 if s31:
     run('privacy-store-timing', [*base,*sim,*vendor,*port,compile(Path('tests/ble_s31_test.c'),nb.flags(vendor=False))])

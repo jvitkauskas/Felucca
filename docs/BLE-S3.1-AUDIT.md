@@ -1,5 +1,47 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
-# S3.1c round-3 clean-room audit — frozen r7
+# S3.1d round-4 clean-room audit — frozen r7
+
+Worktree /root/fm1/Felucca-ble, branch ble-controller, uncommitted above
+0fb0475. No child agents, devices, flashing, commit or push. Every shell
+command used the permitted repository workdir; the supplied toolchain-workspace
+cwd was not inspected. Only frozen r7 and permitted repository sources/records
+were consulted, plus public Bluetooth Core 5.4 Link Layer HTML/text. The four
+supplied failure records were read before implementation. No other snapshot,
+live spec, trace, reconstruction, patch work, SDK tree or vendor controller
+binary/object/IR was opened. No spec or vendored NimBLE/TinyCrypt source changed.
+
+Public Core source:
+https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Core-54/out/en/low-energy-controller/link-layer-specification.html
+The retained out/s3.1-core54-ll.html and .txt are new allowed inputs. Window
+validation was checked against §5.1.1. No SDK header or app-re file was needed.
+The local btsnoop reader decoded supplied HCI records, not radio LL packets.
+
+Existing pinned /root/felucca-ble-env compiler/linker/objcopy/objdump and sdk-min
+package assets were used only as opaque build/packaging dependencies as in
+round 3. No tooling workspace was traversed. The builder checks the three
+retained package-asset hashes. Historical tooling fingerprints are carried
+forward unchanged, not claimed independently revalidated. Native executables
+and inspected target ELF/disassembly contain this open firmware/dependencies.
+
+The r7-only audit script emits BLE-S3.1d-INPUT-SHA256SUMS and checks 152 local
+NimBLE/TinyCrypt hashes against retained import manifests without visiting
+historical source roots. Four failure records and public Core artifacts are
+explicit out/ inputs; local inventory excludes build/out otherwise. Inventory
+hashing is not a claim that every source was read. Old manifests are preserved.
+BLE-S3.1d-TOOLING-PROVENANCE-SHA256SUMS, CHANGED-FILES.txt and
+ARTIFACT-SHA256SUMS retain provenance and outputs.
+
+All S1/S2/S3/S3.1 sanitizer suites and stage-2/stage-3/S3.1 target builds pass.
+The inherited TinyCrypt AES shift-base exception remains. The original LL
+source reproduces the first-window gate regression; all new matrix, encrypted,
+instant/reconnect and 600-second phase tests pass on the existing virtual radio.
+Owner bench script checks are offline only. Target guards and DSP comparison
+pass; build layout/hash are in out/BLE-S3.1D-BUILD.txt. No silicon timing or
+hardware anchor-latch qualification is claimed. Exact historical PDU/reconnect
+causality remains qualified in out/BLE-S3.1d-CONNUPDATE-ANALYSIS.md.
+
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+# Archived S3.1c round-3 clean-room audit — frozen r7
 
 2026-10-20. Worktree `/root/fm1/Felucca-ble`, branch `ble-controller`,
 uncommitted above c5973a1; round-2 implementation b242adc. No agents were

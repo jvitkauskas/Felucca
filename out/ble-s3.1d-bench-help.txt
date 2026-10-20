@@ -1,0 +1,20 @@
+usage: ble_conn_update_bench.py [-h] --address ADDRESS --console CONSOLE
+                                [--index INDEX] --output OUTPUT
+                                [--measure-seconds MEASURE_SECONDS]
+                                [--soak-seconds SOAK_SECONDS]
+
+OWNER ONLY: Linux desktop single-update bench; never invoked by builds/tests.
+Requires root/CAP_NET_RAW, btmon, bluetoothctl, an already bonded FM-1, and its
+CDC console with other console clients closed. Does not flash or remove bonds.
+Example: sudo python3 tools/ble_conn_update_bench.py --address FD:60:52:C0:DF:6C     --console /dev/ttyACM0 --output out/s31d-owner
+
+options:
+  -h, --help            show this help message and exit
+  --address ADDRESS
+  --console CONSOLE
+  --index INDEX
+  --output OUTPUT
+  --measure-seconds MEASURE_SECONDS
+  --soak-seconds SOAK_SECONDS
+                        initial hold crosses the original 89.478-second
+                        failure boundary

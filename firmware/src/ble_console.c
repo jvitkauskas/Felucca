@@ -14,6 +14,10 @@ static void con_ble_bytes(const uint8_t *p,unsigned n)
     for (i=0;i<n;i++) { con_hex(p[i],2); if (i+1<n) con_putc(' '); }
     con_puts("\r\n");
 }
+static void con_ble_field(const char *name,uint32_t value)
+{
+    con_putc(' '); con_puts(name); con_putc(' '); con_dec((int32_t)value);
+}
 static void con_ble_status(void)
 {
     ble_hw_diag_t hw;
@@ -122,6 +126,27 @@ static void con_ble_status(void)
         con_kv("supervision_fail",(int32_t)link.supervision_fail); con_kv("disconnects",(int32_t)link.disconnects);
         con_kx("last_disconnect_reason",link.reason); con_kv("conn_updates",(int32_t)link.updates);
         con_kv("channel_map_updates",(int32_t)link.map_updates); con_kv("late_instants",(int32_t)link.late_instants);
+        con_puts("pending_proc"); con_ble_field("kind",link.instant_kind);
+        con_ble_field("instant",link.instant); con_ble_field("received",link.received);
+        con_ble_field("programmed",link.programmed); con_ble_field("interval",link.pending.interval);
+        con_ble_field("latency",link.pending.latency); con_ble_field("timeout",link.pending.timeout);
+        con_ble_field("win",link.pending.win); con_ble_field("offset",link.pending.offset);
+        con_puts(" map "); con_ble_bytes(link.pending.map,5);
+        con_puts("control_last_ignored"); con_ble_field("opcode",link.ignored_opcode);
+        con_ble_field("reason",link.ignored_reason); con_ble_field("event",link.ignored_event); con_puts("\r\n");
+        for(i=1;i<BLE_IGNORE_COUNT;i++) {
+            static const char *const names[]={"none","length","params","map","pending","role","unexpected","version","reserved","encrypted"};
+            con_puts("control_ignore_"); con_puts(names[i]); con_putc(' ');
+            con_dec((int32_t)link.ignore_reasons[i]); con_puts("\r\n");
+        }
+        for(i=0;i<4;i++) {
+            const ble_update_diag_t *u=&link.update[i];
+            con_puts("conn_update"); con_ble_field("serial",u->serial); con_ble_field("epoch",u->epoch);
+            con_ble_field("old",u->old_interval); con_ble_field("new",u->new_interval);
+            con_ble_field("win",u->win); con_ble_field("offset",u->offset);
+            con_ble_field("instant",u->instant); con_ble_field("received",u->received);
+            con_ble_field("outcome",u->outcome); con_ble_field("reason",u->reason); con_puts("\r\n");
+        }
         con_kv("acl_tx_accepted",(int32_t)link.acl_in); con_kv("acl_tx_rejected",(int32_t)link.acl_rejected);
         con_kv("acl_rx",(int32_t)link.acl_out); con_kv("acl_acked",(int32_t)link.acknowledged);
         con_kv("ncp_credits",(int32_t)link.ncp); con_kv("acl_flushed",(int32_t)link.flushed);

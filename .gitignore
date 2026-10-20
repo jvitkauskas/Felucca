@@ -4,4 +4,4 @@ __pycache__/
 *.fwsc
 
 # Bluetooth Core text downloaded for the S3.1 review (Bluetooth SIG copyright; local reference only)
-out/s3.1-core54-hci.*
+out/s3.1-core54-*

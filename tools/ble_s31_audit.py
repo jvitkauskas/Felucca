@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""S3.1 round 3 audit: r7 and local inputs only. No old external read lists."""
+"""S3.1 round 4 audit: r7 and local inputs only. No old external read lists."""
 from pathlib import Path
 import hashlib, subprocess
 ROOT=Path(__file__).resolve().parents[1]
@@ -13,7 +13,7 @@ def manifest(paths,out):
 # Explicit list: no live-spec/review/trace/older-snapshot traversal.
 external=[SPEC/n for n in NAMES]
 public=sorted((ROOT/'out').glob('s3.1-core54-*.html'))+sorted((ROOT/'out').glob('s3.1-core54-*.txt'))
-bench=[ROOT/'out'/'BLE-S3.1b-BENCH-R1.txt']
+bench=[ROOT/'out'/n for n in ('BLE-S3.1c-CONNUPDATE-R1.txt', 's31c_cu_stuck_ble.txt', 's31c_cu_after_reconnect_ble.txt', 's31c_cu.btsnoop')]
 raw=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=ROOT)
 local=[]
 for b in raw.split(b'\0'):
@@ -33,11 +33,11 @@ for name in ('BLE-S2-NIMBLE-INPUT-SHA256SUMS','BLE-S3-TINYCRYPT-INPUT-SHA256SUMS
         p=ROOT/'firmware/third_party/nimble'/rel
         assert sha(p)==expected,p
         count+=1
-manifest([*external,*public,*bench,*local],ROOT/'out/BLE-S3.1c-INPUT-SHA256SUMS')
+manifest([*external,*public,*bench,*local],ROOT/'out/BLE-S3.1d-INPUT-SHA256SUMS')
 # Existing tooling's historical fingerprints are provenance only. They are not
 # permission to read any other external tree and are not claimed revalidated.
-lines=(ROOT/'out/BLE-S3.1b-TOOLING-PROVENANCE-SHA256SUMS').read_text().splitlines()
-(ROOT/'out/BLE-S3.1c-TOOLING-PROVENANCE-SHA256SUMS').write_text('\n'.join(lines)+'\n')
+lines=(ROOT/'out/BLE-S3.1c-TOOLING-PROVENANCE-SHA256SUMS').read_text().splitlines()
+(ROOT/'out/BLE-S3.1d-TOOLING-PROVENANCE-SHA256SUMS').write_text('\n'.join(lines)+'\n')
 print(f'{len(external)} r7 files; {len(public)} public Core artifacts; {len(bench)} bench records; {len(local)} repository inputs hashed')
 print(f'{count} imported NimBLE/TinyCrypt files match retained upstream SHA256s; no upstream source edits')
 print(f'{len(lines)} historical tooling fingerprints retained (not independently revalidated)')

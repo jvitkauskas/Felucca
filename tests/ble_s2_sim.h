@@ -5,6 +5,10 @@ extern int sim_executor_enabled;
 extern void (*sim_lock_hook)(void);
 #include "../firmware/ble/ble_link.h"
 extern uint32_t sim_ticks,sim_starts,sim_stops,sim_windows,sim_applies;
+extern ble_conn_t sim_applied;
+extern uint8_t sim_apply_kind;
+extern uint16_t sim_apply_event,sim_registered_instant;
+extern uint32_t sim_apply_ticks;
 extern int sim_stop_result,sim_slot[2],sim_latency_enabled;
 extern int sim_start_steps,sim_start_failure;
 extern ble_adv_t sim_advertising;

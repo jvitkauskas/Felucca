@@ -21,6 +21,7 @@ def run(name,objects):
     subprocess.run([cc,'-no-pie','-fsanitize=address,undefined','-Wl,--gc-sections',*map(str,objects),'-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)
 run('logic',[*base,sim,pure])
+run('connection-updates',[*base,sim,compile(Path('tests/ble_conn_update_test.c'))])
 vendor=[compile(p,nb.flags()) for p in nb.sources()]
 port=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_npl','ble_host')]
 integration=compile(Path('tests/ble_s2_integration.c'))

@@ -1,0 +1,9 @@
+Original HEAD ble_link.c, ASan/UBSan native reproduction: expected regression failure (exit -6)
+phase gap at event 5966: diag event 5965, serviced 5966
+s31d-baseline-phase: tests/ble_conn_update_test.c:211: long_session: Assertion `ble_link.diag.event==e && ble_link.diag.events==e+1u' failed.
+
+24 MHz signed half-wrap: 89.478485333 s
+Fifth boundary: 447.392426667 s; event quotient = 29826.161778
+Three serviced halves / 15 ms: 17895.697067 closes
+Observed dump: event 29825 (within one close phase); serviced closes 17896.
+The new 600-second phase test passes with every close served.

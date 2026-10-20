@@ -1,5 +1,139 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
-# BLE S3.1c — round 3, frozen r7
+# BLE S3.1d — round 4, frozen r7
+
+Uncommitted on `ble-controller` above **0fb0475**. S3.1d fixes long-session
+connection-event processing and missing-instant handling, fully clears link
+runtime at close/new CONNECT_IND, and adds pending/ignored/update diagnostics.
+No device, flashing, commit or push operation occurred. Hardware qualification
+of S3.1d remains outstanding.
+
+## Root cause and scope
+
+The original HAL and LL kept testing the original first-window timestamp for
+an entire link. The signed 24-MHz comparison flips at **89.478485 s**, suppressing
+event-close work during alternate halves of the tick wrap. The stuck dump's
+29825/17896 event counters closely match the fifth boundary/three serviced
+halves. A baseline native reproduction fails; the fixed 600-second grid serves
+every close. The original exact-I-1-only instant action could then remain
+pending forever without counting late, blocking later instant procedures.
+
+Core Vol 6 Part B §5.1.1 confirms that **new-interval** WinSize/WinOffset
+validation was correct and remains unchanged. Which historical LL PDU was
+accepted/ignored cannot be proved from HCI-only btsnoop. The original close
+already cleared instant_kind; the next-link 1.89-ms physical event-counter
+rate is not proved to be caused by that flag. Timer-period 6000 in the stuck
+dump is the normal 1-ms backstop, so cumulative worker calls do not establish
+an immediate-work busy loop. Full proved/hypothesis analysis and decoded HCI
+times: [round-4 report](../out/BLE-S3.1d-CONNUPDATE-ANALYSIS.md).
+
+The fix retires the first-anchor gate after the first real close; detects
+skipped/expired unprogrammed instants with reason 28; keeps far instants in
+event units; holds latency off; protects a future window from old-event RX;
+and clears the complete procedure record on completion/close. New creation
+clears all connection-local runtime and deferred indexes, plus HAL delayed-slot
+flags. Stop/settle/quiesce/reclaim/report and epoch ordering remain in place.
+At I-1 the hardware programming order and r7 values are preserved. Software
+parameters change at the instant; supervision retains its ordered instant/
+window reset events. Physical A_INSTANT/A_INTERVAL/A_WIN_OFFSET latching and
+RF window edges are still A1/A7 bench questions.
+
+## Diagnostics and native verification
+
+`ble` now prints pending_proc (kind 0 none/1 update/2 map, instant, received
+event, programmed, params/map), control_last_ignored (opcode/reason/receipt
+event), per-reason counters and four conn_update attempt records. History
+survives ordinary reconnects; HCI Reset clears it. Sort ring records by serial;
+epoch distinguishes links. Update outcomes: 0 empty, 1 pending, 2 programmed,
+3 applied, 4 invalid ignored, 5 busy ignored, 6 instant passed, 7 closed.
+Ignore reason IDs: 1 length, 2 params, 3 map, 4 pending, 5 role, 6 unexpected,
+7 repeated version, 8 reserved/empty (opcode 255 unavailable), 9 encrypted.
+
+Full ASan/UBSan suites (warnings as errors):
+
+```sh
+bash tests/run_ble_s1_tests.sh
+python3 tests/run_ble_s2_tests.py
+python3 tests/run_ble_s3_tests.py
+python3 tests/run_ble_s3_tests.py --s31
+```
+
+Logs: out/ble-s3.1d-{s1,s2,s3}-tests.log and out/ble-s3.1d-tests.log.
+The inherited TinyCrypt AES shift-base exception remains; upstream is unchanged.
+`ble_conn_update_test.c` uses the existing virtual-radio ports: 48 window/
+interval/near/far cases plus 48 immediate following updates, 12 encrypted
+central cases, invalid limits, late/skipped/missing-close handling, I-1 receipt,
+seven closing causes and fresh-link timing, and 600 seconds across tick wraps.
+Existing event-counter-wrap maps, actual NimBLE pairing/repeat/RPA, encryption,
+Reset/credit/ordering and ten-minute suites also pass. Baseline reproduction:
+out/ble-s3.1d-baseline-repro.log. Two test helpers now allow 64 Reset passes;
+production clear slices remain 128 bytes with the original timing thresholds.
+
+Models observe port writes, software anchors/parameters and events. They cannot
+prove silicon latch behavior, physical RF timing, actual 1.89-ms-rate recovery,
+or IRQ/executor timing. Per-kind F-27, A1/A7/B22 and prior unresolved hardware
+qualification continue to apply.
+
+## Build and audit
+
+```sh
+FELUCCA_BLE=1 FELUCCA_BLE_STAGE=3 FELUCCA_BLE_S31=1 \
+JIELI_TOOLCHAIN=/root/felucca-ble-env/jieli/toolchain \
+AC79_SDK=/root/felucca-ble-env/sdk-min ./build.sh
+python3 tools/ble_report.py s3.1d
+python3 tests/target_budget.py
+python3 tools/ble_s31_audit.py
+sha256sum -c out/felucca-ble-s3.1d.sha256
+```
+
+Image: out/felucca-ble-s3.1d.fwsc (609849 B).
+SHA256: `50b9b698f1ec94af1ff867e18e7c643aabdb51aa145e08fc6586e7711e238a16`.
+App 528844 / 581564 B; static RAM 97256 / 98304 B (1048 B free);
+pool including DMA 331268 / 344064 B (12796 B free). DMA 4340 B at 01C6FD10;
+stacks 24320 / 7936 B, physical high water unmeasured.
+Build/layout: out/ble-s3.1d-build.log and out/BLE-S3.1D-BUILD.txt.
+Stage-2/stage-3 option checks use out/ble-s3.1d-{s2,s3}-build.log; target DSP
+comparison: out/ble-s3.1d-target-budget.log. Input/provenance/changed-file/
+artifact manifests use out/BLE-S3.1d-; audit log out/ble-s3.1d-audit.log.
+Historical artifacts and manifests are retained. Audit details:
+[BLE-S3.1-AUDIT.md](BLE-S3.1-AUDIT.md). r7 ambiguities are appended to
+[SPEC-GAPS-S3.1.md](SPEC-GAPS-S3.1.md); the spec itself is untouched.
+
+## Owner desktop bench — not run by the implementer
+
+Prepare the S3.1d image using the owner's normal flash workflow, retain a
+BlueZ bond and verify encrypted MIDI. Close other serial clients and stop
+other scripts that issue connection updates. On the Linux desktop run:
+
+```sh
+sudo python3 tools/ble_conn_update_bench.py \
+  --address FD:60:52:C0:DF:6C --console /dev/ttyACM0 --index 0 \
+  --output out/s31d-owner-01
+```
+
+Replace the address/console/index with the owner's values. Requires Python 3,
+btmon, bluetoothctl, raw-HCI privileges and an existing bond; the script does
+not pair/remove bonds or flash. Its output directory must be new. It captures
+btmon text and btsnoop, starts a fresh link, normalizes to 15 ms if needed,
+and measures 15 ms before and after a default **95-second soak**. It then sends
+one raw HCI command at a time: **15->7.5, 7.5->15, 15->30, 30->15 ms**. Each
+must get desktop Complete 00, exactly one FM-1 conn_updates increment, no
+pending procedure, and an independent 10-second wall-clock measurement using
+both console event counters. It then disconnects/reconnects, requires a new
+epoch, checks a fresh 15-ms measurement and disconnects. Keep console-*.txt,
+capture.btsnoop, btmon.txt, measurements.json and terminal output. Failure
+keeps partial evidence; inspect it before restarting. Help/parser/HCI/counter
+fixtures (`python3 tests/ble_conn_update_bench_test.py`) were checked offline; the script has not been exercised on a device.
+
+Require measured intervals close to 7.5/15/30 ms, both event deltas agreeing,
+zero new supervision/late failures and no growing pending state. The script
+uses an 8% console-timing allowance, not an RF accuracy claim. Repeat a
+10-minute encrypted loaded run at 7.5 and 30 ms, retaining F-27 and audio
+counters. Where available, capture LL with a common-clock sniffer: actual
+WinSize/WinOffset/Instant and the transition window cannot be inferred from
+desktop HCI or this native model.
+
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+# Archived S3.1c — round 3, frozen r7
 
 Uncommitted on `ble-controller` above c5973a1 (round-2 code b242adc).
 `out/BLE-S3.1b-BENCH-R1.txt` records the supplied baseline: F-24/F-28 and

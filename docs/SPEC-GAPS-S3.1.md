@@ -173,3 +173,37 @@ The downloaded public text and HTML are retained in out/s3.1-core54-hci.*.
     and central's existing response timeout are unchanged. No new host wait,
     timer or relaxed deadline is introduced. The <=70-us injected cost tests
     demonstrate the scheduling split; <=100 us on silicon still needs F-27.
+
+## Round 4 / r7 — central connection updates (2026-10-20)
+
+23. **Window bounds are new-interval bounds.** Public Core 5.4 Vol 6 Part B
+    §5.1.1 explicitly uses connInterval_NEW for both WinOffset and WinSize.
+    r7 02 §5.4 checks 6/7, imported by §5.6 and 03 §7, are consistent when
+    applied to the proposed parameters. Keep the existing validator: new
+    7.5 ms permits WinSize <=5 and WinOffset <=6, new 30 ms permits <=8/<=24.
+    The old interval belongs to the instant-to-window geometry, not these
+    limits. Invalid parameters are ignored as r7 directs, without an LL reject;
+    valid late instants close with 28. Public LL HTML/text are retained in out/.
+24. **First-window phase gate lifetime.** r7 02 §§5.4/5.8 require ignoring
+    closes before the first anchor; 04 §0.7 permits signed nearby tick tests.
+    Neither authorizes comparing with that anchor for the entire connection.
+    At 24 MHz this flips after 89.478 s. Use the first-served-close phase as
+    the latch that permanently retires the gate. The old gate reproduces the
+    stuck counter pattern; the specific historical update's receipt/instant
+    remain unknown. No spec amendment is needed for this implementation bug.
+25. **Missing the I-1 interrupt.** 02 §5.6 requires application at the instant
+    or Instant Passed, but does not describe recovery when that close is never
+    served. Interpret it as 28 at detection, never late apply. Detect a skipped
+    I-1 on the next close and an expired unprogrammed 1-ms guard from the worker.
+    RX progress strictly beyond I is a fallback when no close IRQ or timed
+    anchor arrives; equality cannot decide the r7 phase ambiguity. Far instants
+    remain event numbers until a bounded absolute timestamp can be formed. Existing r7 values and scheduling bounds are unchanged.
+26. **A1/A7/B22 are still open.** Preserve r7's programming order, discontinuous
+    offset encoding and OldInterval + WinOffset geometry. No model of the
+    undocumented hardware latch is evidence of the RF edge. Complete software
+    and delayed-slot resets are justified independently; source already cleared
+    instant_kind at close, so its cross-link survival is not the proved cause
+    of the next-link 1.89-ms hardware counter rate. Native tests prove requested
+    writes and software timing. The owner bench and common-clock LL sniffer
+    must qualify hardware anchor programming, including shorter intervals and
+    maximum windows. No specification file was edited.
