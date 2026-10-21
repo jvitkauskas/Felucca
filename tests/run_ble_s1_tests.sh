@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 set -eu
 cd "$(dirname "$0")/.."
 mkdir -p build/host

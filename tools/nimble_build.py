@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """Shared source/configuration list for target and radio-free integration tests."""
 from pathlib import Path
 import os

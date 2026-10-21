@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # BLE S1 clean-room access audit
 
 Implementation session: 2026-10-19, working directory always

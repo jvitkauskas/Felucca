@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """Hash the explicit S2 external input list; no external discovery/search."""
 from pathlib import Path
 import hashlib,subprocess,sys,shlex

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S2 bench round 1 correction
 
 The parent tested package SHA256 684ea866bf5d1f23fa8356266b9e04671ab5dbb88877260839a12b357bb1bc05.

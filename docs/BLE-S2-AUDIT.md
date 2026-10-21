@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # BLE S2 clean-room access audit
 
 Implementation date: 2026-10-19. All commands used the worktree

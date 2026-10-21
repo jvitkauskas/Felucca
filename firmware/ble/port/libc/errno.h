@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #define EINVAL 22
 #define ENOMEM 12
 #define ENOTSUP 95

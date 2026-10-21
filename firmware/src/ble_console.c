@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #pragma clang diagnostic push
 #pragma clang diagnostic error "-Wall"
 #pragma clang diagnostic error "-Wextra"

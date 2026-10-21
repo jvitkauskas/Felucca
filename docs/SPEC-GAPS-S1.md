@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S1 specification gaps and implementation decisions
 
 Inputs are the frozen snapshots at `/root/wl82-ble-spec-snapshots/r2/` and

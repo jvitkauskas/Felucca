@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* BLE-MIDI 13-bit millisecond timestamps, packet-local running status, and
  * streaming SysEx. No heap; MIDI realtime does not disturb a pending message. */
 #include "ble_midi.h"

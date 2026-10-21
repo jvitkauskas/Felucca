@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Off-target tests of the actual controller/packet/record code. No device I/O. */
 #include <assert.h>
 #include <stdio.h>

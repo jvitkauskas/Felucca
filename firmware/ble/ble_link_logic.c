@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Pure r4 02 §§3.4,5.4-5.8,6; 03 §6.2 arithmetic. */
 #include "ble_link.h"
 #include "ble_memory.h"

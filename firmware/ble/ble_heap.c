@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Bounded main-context allocator for NimBLE's startup pools and GATT table.
  * No library allocator is linked. First fit and adjacent free-block coalescing
  * permit host reinitialisation without leaking the fixed arena. */

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* NimBLE host and application: all functions except the two SPSC ring entries
  * execute exclusively in Felucca's main loop, never in a timer/radio ISR. */
 #include <string.h>

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # Felucca BLE S3 — frozen specification r4
 
 Uncommitted implementation above the owner's device-passed S2 commit 3581aba.

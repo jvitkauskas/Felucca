@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r4 02 §8: CCM with 13-byte nonce, L=2, one AAD octet and four-byte MIC. */
 #include "ble_crypto.h"
 #include "ble_s1.h"

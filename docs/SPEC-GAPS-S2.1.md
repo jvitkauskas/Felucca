@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S2.1 decisions and remaining r4 qualification
 
 The frozen r4 snapshot supersedes the r3 software contracts used in S2.

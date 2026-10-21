@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S3 specification gaps and implementation decisions
 
 Only frozen r4, the permitted reviews and open NimBLE/platform sources were

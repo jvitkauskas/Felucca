@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #include <stdint.h>
 #define PRIu32 "u"
 #define PRIx32 "x"

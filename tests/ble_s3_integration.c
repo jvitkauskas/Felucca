@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Actual pinned host SMP (legacy and SC), actual HCI/LL/CCM, deterministic
  * test-only central and NOR model. No hardware or network I/O. */
 #include <assert.h>

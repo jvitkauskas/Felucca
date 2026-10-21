@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S2 specification gaps and implementation decisions
 
 The input is the frozen r3 snapshot, with the permitted implementability reviews

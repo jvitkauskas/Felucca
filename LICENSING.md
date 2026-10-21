@@ -109,10 +109,30 @@ NimBLE 1.9.0, commit `da7e3256da3ba80b232df880f40d8359311cc62e`.
 Its original Apache-2.0 copyright notices, LICENSE and NOTICE are retained.
 Only its host, GAP/GATT services, transport memory pools and porting utilities
 are linked. The Felucca NPL, H4 glue, controller and MIDI application are
-GPL-3.0-only. See `docs/BLE-S2-AUDIT.md` and the import hash manifest.
+MIT-licensed new files (next section). See `docs/BLE-S2-AUDIT.md` and the import hash manifest.
 
 S3 also links the pinned NimBLE checkout's bundled TinyCrypt AES, CMAC, SHA-256
 and P-256 ECC sources under `firmware/third_party/nimble/ext/tinycrypt/`.
 The original BSD-3-Clause / Kenneth MacKay notices, LICENSE and AUTHORS are
 retained unchanged. The combined firmware remains GPL-3.0-only. See
 `out/BLE-S3-TINYCRYPT-INPUT-SHA256SUMS` and `docs/BLE-S3-AUDIT.md`.
+
+## BLE controller files (MIT)
+
+The files added by the BLE work are MIT-licensed (`SPDX-License-Identifier: MIT`,
+text in `LICENSES/MIT-BLE.txt`, Copyright (c) 2026 Julius Vitkauskas). These are the
+new files under `firmware/ble/` (including `port/`), `firmware/hal/fm1_ble.h`,
+`fm1_ble_crypto.h` and `fm1_ble_radio.h`, `firmware/src/ble_console.c` and
+`ble_platform.c`, `tests/ble_*` with the BLE test runners, `tests/compile_nimble.py`,
+`tools/ble_*.py`, `tools/nimble_build.py`, `tools/vendor_nimble.py`, and the
+`docs/BLE-*.md` and `docs/SPEC-GAPS-*.md` documents. MIT is compatible with the GPL, so
+firmware built with them remains GPL-3.0-only as a whole, as above.
+
+Not covered by the MIT grant:
+- the changes the BLE work made to existing Felucca files (for example `main.c`,
+  `console.c`, `app.ld`): those files stay GPL-3.0-only;
+- `firmware/hal/fm1_ble_tables.h`: numerical radio configuration tables transcribed from
+  the clean-room specification. Their redistribution policy is unresolved (see "No vendor
+  material" and `docs/BLE-S1.md`), so the file keeps its GPL-3.0-only header and no
+  further rights are granted for it;
+- the vendored Apache NimBLE (Apache-2.0) and TinyCrypt (BSD-3-Clause) sources above.

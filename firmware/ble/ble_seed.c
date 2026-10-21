@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r4 04 §8.1. Hash counter generator; all physical inputs carry zero credit.
  * Seed flash is accessed only by boot. Neither HCI Reset nor reseed writes it. */
 #include "ble_seed.h"

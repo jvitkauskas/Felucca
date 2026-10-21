@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Independent central event grid driving the existing virtual-radio ports.
  * Port writes are observed; no simulation of undocumented anchor latches. */
 #include <assert.h>

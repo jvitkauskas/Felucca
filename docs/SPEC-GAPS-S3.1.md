@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S3.1 r5 review and implementation choices
 
 Reviewed before implementation, 2026-10-20. Normative input is exclusively frozen

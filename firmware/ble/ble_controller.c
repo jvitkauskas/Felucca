@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* In-memory H4 controller, r4 03 and 04 §10. LL executor context.
  * Host callbacks only copy into the bounded host transport ring. */
 #include "ble_s1.h"

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r5 03 §3.6. Peer privacy only (D-6); no local RPA generation. */
 #include "ble_privacy.h"
 #include "ble_crypto.h"

@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # Felucca BLE S1
 
 This is an **unflashed, unqualified bench implementation** of the frozen r2

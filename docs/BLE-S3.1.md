@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # BLE S3.1d — round 4, frozen r7
 
 Uncommitted on `ble-controller` above **0fb0475**. S3.1d fixes long-session
@@ -132,7 +132,7 @@ counters. Where available, capture LL with a common-clock sniffer: actual
 WinSize/WinOffset/Instant and the transition window cannot be inferred from
 desktop HCI or this native model.
 
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # Archived S3.1c — round 3, frozen r7
 
 Uncommitted on `ble-controller` above c5973a1 (round-2 code b242adc).

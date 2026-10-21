@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r5 04 §0.8. All accumulator observations are atomic with TIMER4 reads. */
 #include "ble_link.h"
 #include "ble_timing.h"

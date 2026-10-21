@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 import os,sys,subprocess
 from pathlib import Path
 os.environ['FELUCCA_BLE_STAGE']='3'

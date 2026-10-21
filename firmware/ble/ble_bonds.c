@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Main-context store. No raw NimBLE structures are persisted. 30 x 128-byte
  * records at 0x96000; last 256 bytes untouched. Compaction is intentionally
  * one-sector: power loss during compaction may lose bonds, never seed records. */

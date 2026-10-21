@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #ifndef FELUCCA_BLE_BONDS_H
 #define FELUCCA_BLE_BONDS_H
 #include <stdint.h>

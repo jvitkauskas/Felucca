@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Common clean-room WL82 S1/S2 API. Hardware facts: frozen specifications. */
 #ifndef FELUCCA_BLE_S1_H
 #define FELUCCA_BLE_S1_H

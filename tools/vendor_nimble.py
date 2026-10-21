@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """Offline import, from the explicitly permitted Apache NimBLE checkout only."""
 from pathlib import Path
 import hashlib, shutil, subprocess

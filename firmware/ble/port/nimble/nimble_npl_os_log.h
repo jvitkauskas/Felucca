@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #ifndef FELUCCA_NPL_LOG_H
 #define FELUCCA_NPL_LOG_H
 #undef BLE_NPL_LOG

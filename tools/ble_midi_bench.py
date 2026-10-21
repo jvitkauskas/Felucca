@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """Owner-operated Linux BlueZ BLE-MIDI bench. Never used by the build/tests.
 Requires Python 3 + dbus-next, a desktop LE adapter, and this S2 image on FM-1.
 Example: python3 tools/ble_midi_bench.py --address 62:40:8B:67:65:58 --duration 600

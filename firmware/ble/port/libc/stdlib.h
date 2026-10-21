@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #ifndef FELUCCA_LIBC_STDLIB_H
 #define FELUCCA_LIBC_STDLIB_H
 #include <stddef.h>

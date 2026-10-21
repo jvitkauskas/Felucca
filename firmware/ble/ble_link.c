@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r4 controller worker. Runs in the dedicated LL executor below audio.
  * ble_ll_poll delivers only to the bounded controller-to-host transport ring. */
 #include "ble_link.h"

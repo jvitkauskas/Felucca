@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S2.1 / S3 clean-room input audit
 
 Date: 2026-10-19. Worktree /root/fm1/Felucca-ble, ble-controller, uncommitted

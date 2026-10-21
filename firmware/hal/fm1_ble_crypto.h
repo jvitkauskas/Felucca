@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r4 02 §8.4: standard-order AES block entry, private to BLE.
  * Key/data FIFO words go MSW first; result registers are reversed MSW/LSW.
  * The entire transaction has a 26-us deadline and holds IRQ exclusion. */

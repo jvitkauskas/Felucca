@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """S3.1 round 4 audit: r7 and local inputs only. No old external read lists."""
 from pathlib import Path
 import hashlib, subprocess

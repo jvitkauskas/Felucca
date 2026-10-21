@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #ifndef BLE_S2_SIM_H
 #define BLE_S2_SIM_H
 extern int sim_executor_enabled;

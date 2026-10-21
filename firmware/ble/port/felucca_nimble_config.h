@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #ifndef FELUCCA_NIMBLE_CONFIG_H
 #define FELUCCA_NIMBLE_CONFIG_H
 #define malloc ble_nm_malloc

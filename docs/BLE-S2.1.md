@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # Felucca BLE S2.1 — frozen specification r4
 
 Based on the owner's device-passed S2 commit 3581aba. No device/USB/network

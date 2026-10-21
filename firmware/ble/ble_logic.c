@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* r2 01 §§2.2,4.7; 02 §§3,5.3,6.2; 03 §3.5; 04 §7. No MMIO. */
 #include "ble_s1.h"
 #include "ble_memory.h"

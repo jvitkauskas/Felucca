@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #ifndef BLE_S3_SIM_H
 #define BLE_S3_SIM_H
 #include "ble_s2_sim.h"

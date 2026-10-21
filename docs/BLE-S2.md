@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # Felucca BLE S2
 
 S2 adds one unencrypted peripheral connection, a real Apache NimBLE 1.9.0 host,

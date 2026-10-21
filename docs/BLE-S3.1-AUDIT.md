@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # S3.1d round-4 clean-room audit — frozen r7
 
 Worktree /root/fm1/Felucca-ble, branch ble-controller, uncommitted above
@@ -40,7 +40,7 @@ pass; build layout/hash are in out/BLE-S3.1D-BUILD.txt. No silicon timing or
 hardware anchor-latch qualification is claimed. Exact historical PDU/reconnect
 causality remains qualified in out/BLE-S3.1d-CONNUPDATE-ANALYSIS.md.
 
-<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- SPDX-License-Identifier: MIT -->
 # Archived S3.1c round-3 clean-room audit — frozen r7
 
 2026-10-20. Worktree `/root/fm1/Felucca-ble`, branch `ble-controller`,

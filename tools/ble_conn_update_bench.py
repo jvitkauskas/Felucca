@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """OWNER ONLY: Linux desktop single-update bench; never invoked by builds/tests.
 Requires root/CAP_NET_RAW, btmon, bluetoothctl, an already bonded FM-1, and its
 CDC console with other console clients closed. Does not flash or remove bonds.

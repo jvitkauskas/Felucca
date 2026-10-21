@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Actual pinned NimBLE, actual HCI/controller/LL objects, simulated RF slots.
  * No socket, BlueZ, USB, hardware register, device, or network access. */
 #include <assert.h>

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 /* Private LL procedures. Included after tx_queue; RX state changes only when
  * the executor consumes a PDU or a marker in the single ordered RX stream. */
 #define BLE_CCM_LAST (((uint64_t)1<<39)-1u)

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: MIT */
 #include <string.h>
 #include "ble_s2_sim.h"
 #include "../firmware/ble/ble_timing.h"

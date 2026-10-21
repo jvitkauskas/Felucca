@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: MIT
 """Offline bench protocol/counter fixtures. Opens no radio, console or device."""
 import importlib.util
 from pathlib import Path
