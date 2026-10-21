@@ -1,0 +1,30 @@
+F-25 bond store under churn and compaction - S3.1d, 2026-10-21 10:45-11:17
+Image felucca-ble-s3.1d.fwsc (50b9b698...). Centrals: HONOR Magic V3 (legacy bond, RPA) and desktop BlueZ
+(SC bond, public). Flash dump ~/backups/fm1-20261021-111651.bin (desktop, read-only backup in download mode).
+
+RESULT: PASS.
+
+1. No-change sessions write nothing [verified]: a 12-minute real-use session, a phone session (BT toggle,
+   new RPA) and a desktop session (adapter on -> BlueZ auto-connect + MIDI subscribe -> adapter off) gave
+   bond_writes 0 each. BlueZ's MIDI plugin and Android both keep the subscription, so plain sessions
+   cannot create churn; the 40-session plan of 05 F-25 is replaced by re-pair churn below.
+2. Churn: 10 desktop re-pair cycles (bluetoothctl remove; scan; pair with a NoInputNoOutput agent;
+   trust; connect; adapter off). bond_writes 33, bond_erases 1 (the first compaction, during cycle 3),
+   bond_failures 0, private_refused 0, orphan_dropped 0. 6 cycles paired at once (SC); 4 failed on the
+   desktop with org.bluez.Error.ConnectionAttemptFailed before any pairing reached the FM-1 (FM-1
+   pair_failures +0 in every cycle; a BlueZ connection race after `remove`), and the next cycle re-paired.
+   One earlier manual attempt (before the cycles) showed FM-1 pair_failures 8 over 12 BlueZ connection
+   attempts, statuses not retained: INFO, not reproduced inside the cycles.
+3. Phone bond after the compaction: reconnect from a new RPA, resolved, encrypted, no prompt, ltk_negative 0.
+4. FM-1 power cycle: seed CHAINED seq 15; 8 records loaded, malformed 0, private_dropped 0, orphan_dropped 0,
+   rl_entries 2. Phone reconnect (new RPA): resolved, encrypted with the stored legacy key, no prompt.
+   Desktop reconnect: encrypted with the stored SC key, pair_failures 0, ltk_negative 0. Both sessions:
+   bond_writes 0.
+5. Flash dump of 0x96000: 22 records + 10 blank slots, sequence numbers 58..79 strictly increasing.
+   Slots 0-7 = the compaction image (seq 58-65): exactly the 8 live records (desktop our-sec, peer-sec,
+   2 CCCD; phone CCCD, our-sec, peer-sec, CCCD), followed by 14 journal records of the later re-pairs
+   (pattern: CCCD delete, our-sec, peer-sec, CCCD subscribe). Every record is keyed by an identity
+   address (desktop E8:BF:B8:9C:77:40 public; phone 44:90:46:83:9A:6F public); no RPA-keyed record; every
+   CCCD has a security record for the same identity (no orphans). Desktop records sc=1 (peer IRK not
+   distributed by BlueZ), phone records sc=0 (legacy), irk=1.
+Not covered: a power cut during compaction (one-sector journal; the documented crash window remains).
