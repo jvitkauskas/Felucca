@@ -1,0 +1,14 @@
+BLE S3.1d real-use session - 2026-10-21 10:25-10:38
+Image felucca-ble-s3.1d.fwsc (50b9b698...). The owner played the FM-1 normally (pads/keys, sounds, projects,
+idle stretches) while connected to the HONOR Magic V3 (Android 16) through MIDI BLE Connect, with MIDI Scope
+showing the notes. Counters were sampled every 30 s on the FM-1 console (out/s31d-realuse.log, 22 samples).
+
+RESULT: PASS. The owner noticed nothing wrong (no missing/stuck notes, no clicks, no disconnect).
+- Link: one connection for the whole session, phone RPA resolved, encrypted, 15 ms; 0 disconnects,
+  0 supervision failures, 0 late instants, 0 ignored control PDUs.
+- conn_event 11368 -> 60563 in 738 s = 15.00 ms per event over 12 minutes: every event serviced across
+  eight 89.5 s half-wrap boundaries (the S3.1d fix holds under real use).
+- BLE-MIDI FM-1 -> phone: midi_packets_out 2 -> 662; ACL 667 accepted / 667 acked; midi_bad 0,
+  midi_drop 0, rx_backpressure 0, NimBLE event/ACL drops 0, heap failures 0; mic_failures 0.
+- Audio while playing: audio_max 915 us (playing; 637 idle), audio_late 0, voices_shed 0.
+- Executor: item max 69 us, over_100 0, own_over_250 0, refill over_80 0.
