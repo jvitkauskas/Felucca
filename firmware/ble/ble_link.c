@@ -16,7 +16,17 @@ static void security_init(void),security_new(void),security_worker(void);
 static int security_procedure(const uint8_t *p,uint8_t n);
 #endif
 struct ble_link ble_link;
-typedef struct { uint32_t epoch; uint16_t header,event; uint8_t n,used; uint8_t data[BLE_LL_PAYLOAD_MAX]; } rx_t;
+typedef struct {
+    uint32_t epoch;
+    uint16_t header,event;
+    uint8_t n,used;
+#if FM1B_BLE_DIAG && FELUCCA_BLE_STAGE >= 3
+    uint32_t received_ms,since_update_ms;
+    uint16_t interval,status;
+    uint8_t slot,flags;
+#endif
+    uint8_t data[BLE_LL_PAYLOAD_MAX];
+} rx_t;
 typedef struct { uint32_t epoch; uint8_t n,llid,state,terminate; uint8_t data[27]; uint32_t order; } tx_t;
 static struct {
     rx_t rx[BLE_RX_STREAM],host_rx[BLE_RX_BACKLOG];
@@ -30,6 +40,10 @@ static struct {
     uint8_t r,w,count,pdus,hr,hw,hcount;
 } queues __attribute__((section(".pool.ble")));
 static struct { uint32_t epoch; unsigned offset; uint8_t active; } reset;
+#if FM1B_BLE_DIAG && FELUCCA_BLE_STAGE >= 3
+static uint32_t last_update_ms;
+static uint8_t last_update_valid;
+#endif
 
 static void control_ignore(uint8_t opcode,uint8_t reason,uint16_t event)
 {
@@ -83,6 +97,10 @@ static void instant_commit(uint32_t now)
         ble_link.conn=ble_link.pending;
         ble_put16(p+6,ble_link.conn.interval); ble_put16(p+8,ble_link.conn.latency); ble_put16(p+10,ble_link.conn.timeout);
         meta_add(p,sizeof p); ble_link.diag.updates++;
+#if FM1B_BLE_DIAG && FELUCCA_BLE_STAGE >= 3
+        last_update_ms=ble_port_ms()-(uint32_t)(now-ble_link.instant_time)/24000u;
+        last_update_valid=1;
+#endif
     } else { memcpy(ble_link.conn.map,ble_link.pending.map,5); ble_link.diag.map_updates++; }
     update_outcome(BLE_UPDATE_APPLIED,0); instant_clear();
     ble_link.priority=28; ble_port_priority(28);
@@ -177,6 +195,9 @@ int ble_ll_create(const ble_conn_t *c,uint32_t now)
 #if FELUCCA_BLE_STAGE >= 3
     security_new(); ble_entropy_connection();
 #endif
+#if FM1B_BLE_DIAG && FELUCCA_BLE_STAGE >= 3
+    last_update_valid=0;
+#endif
     ble_link.conn=*c; ble_link.epoch++; ble_link.created_at=now;
     ble_link.state=BLE_LINK_CREATED; ble_link.created_pending=1;
     ble_link.diag.created++; ble_link.diag.accepted++;
@@ -213,7 +234,8 @@ int ble_ll_rx_room(void)
     if(live() && (queues.pdus==BLE_RX_BACKLOG || queues.count==BLE_RX_STREAM)) { ble_link.diag.rx_backpressure++; return 0; }
     return 1;
 }
-int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,int delayed)
+int ble_ll_rx_slot(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,
+                   int delayed,uint8_t slot,uint8_t flags)
 {
     unsigned cls,n=header>>8;
     uint8_t reason;
@@ -255,12 +277,24 @@ int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32
     if(!(header&3u) || !n) return 1;
 #endif
     r=&queues.rx[queues.w]; r->epoch=ble_link.epoch; r->event=event; r->header=header; r->n=(uint8_t)n;
+#if FM1B_BLE_DIAG && FELUCCA_BLE_STAGE >= 3
+    r->received_ms=ble_port_ms(); r->interval=ble_link.conn.interval; r->status=status;
+    r->since_update_ms=last_update_valid ? r->received_ms-last_update_ms : UINT32_MAX;
+    r->slot=slot; r->flags=flags|(delayed ? BLE_RX_DELAYED|BLE_RX_EVENT_UNKNOWN : 0);
+    if(cls==2) r->flags|=BLE_RX_REPEAT;
+#else
+    (void)slot; (void)flags;
+#endif
     memcpy(r->data,data,n); r->used=1;
     queues.w=(uint8_t)((queues.w+1u)%BLE_RX_STREAM); queues.count++; queues.pdus++;
     ble_port_pend();
     if((unsigned)queues.count+queues.hcount>ble_link.diag.rx_peak) ble_link.diag.rx_peak=(uint16_t)(queues.count+queues.hcount);
     if((header&3u)!=3 && ble_link.hold<3) ble_link.hold=3;
     return 1;
+}
+int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,int delayed)
+{
+    return ble_ll_rx_slot(status,header,data,stamp,event,delayed,255,0);
 }
 int ble_ll_rx_marker(uint8_t marker)
 {

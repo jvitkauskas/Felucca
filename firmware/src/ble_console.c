@@ -18,8 +18,50 @@ static void con_ble_field(const char *name,uint32_t value)
 {
     con_putc(' '); con_puts(name); con_putc(' '); con_dec((int32_t)value);
 }
+#if FELUCCA_BLE_STAGE >= 3 && FM1B_BLE_DIAG
+static void con_ble_mic_dump(void)
+{
+    /* Snapshot before USB output yields: failures cannot tear a readout. */
+    ble_mic_record_t records[BLE_MIC_RECORDS];
+    unsigned count=ble_security_mic_records(records);
+    con_kv("mic_records",(int32_t)count);
+    for(unsigned i=0;i<count;i++) {
+        const ble_mic_record_t *d=&records[i];
+        con_puts("mic_record serial "); con_dec((int32_t)d->serial);
+        con_puts(" ms "); con_dec((int32_t)d->ms);
+        con_puts(" epoch "); con_dec((int32_t)d->epoch);
+        con_puts(" received_ms "); con_dec((int32_t)d->received_ms);
+        con_puts(" event "); con_dec(d->event);
+        con_puts(" service_event "); con_dec(d->service_event);
+        con_puts(" interval "); con_dec(d->interval);
+        con_puts(" since_update_ms "); con_hex(d->since_update_ms,8); con_putc('\n');
+        con_puts("mic_pdu serial "); con_dec((int32_t)d->serial);
+        con_puts(" slot "); con_dec(d->slot);
+        con_puts(" flags "); con_hex(d->flags,2);
+        con_puts(" status "); con_hex(d->status,4);
+        con_puts(" llid "); con_dec(d->header&3u);
+        con_puts(" sn "); con_dec((d->header>>3)&1u);
+        con_puts(" nesn "); con_dec((d->header>>2)&1u);
+        con_puts(" md "); con_dec((d->header>>4)&1u);
+        con_puts(" length "); con_dec(d->header>>8);
+        con_puts(" counter "); con_hex((uint32_t)(d->counter>>32),2); con_hex((uint32_t)d->counter,8); con_putc('\n');
+        for(unsigned j=0;j<d->rx_count+d->tx_count;j++) {
+            int rx=j<d->rx_count;
+            const ble_mic_pdu_t *p=rx ? &d->rx[j] : &d->tx[j-d->rx_count];
+            con_puts(rx ? "mic_rx serial " : "mic_tx serial "); con_dec((int32_t)d->serial);
+            con_puts(" index "); con_dec((int32_t)(rx ? j : j-d->rx_count));
+            con_puts(" sn "); con_dec(p->sn);
+            con_puts(" counter "); con_hex((uint32_t)(p->counter>>32),2); con_hex((uint32_t)p->counter,8);
+            con_puts(" length "); con_dec(p->length); con_putc('\n');
+        }
+    }
+}
+#endif
 static void con_ble_status(void)
 {
+#if FELUCCA_BLE_STAGE >= 3 && FM1B_BLE_DIAG
+    con_ble_mic_dump();
+#endif
     ble_hw_diag_t hw;
     ble_diag_t d;
     unsigned i;

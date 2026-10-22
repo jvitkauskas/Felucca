@@ -141,6 +141,9 @@ static void bb_refill_limit(unsigned limit)
         BB_F16(BF_TX_ADV+slot*2)=0;
         BB_F16(BF_TX_DATA+slot*2)=(uint16_t)((BB_F16(BF_TX_DATA+slot*2)&4u)|((uint16_t)n<<8)|(md<<3)|llid);
         BB_F16(BF_FLOW)=(uint16_t)((BB_F16(BF_FLOW)&~64u)|(md<<6));
+#if FELUCCA_BLE_STAGE >= 3
+        ble_security_tx_loaded((BB_F16(BF_TX_DATA+slot*2)>>2)&1u);
+#endif
         bb.tx_id[slot]=(int8_t)id; br_sync(); BB_F8(BF_TX_CTL+slot)&=(uint8_t)~1u; br_sync();
         loads++;
     }
@@ -207,7 +210,13 @@ static void bb_connected_rx(uint32_t stamp,int recovery)
     } while(a!=b);
     first=a&1u;
     for(j=0;j<2;j++) if(a&(2u<<(first^j))) slots[held++]=first^j;
-    if(marker && (!held || !ble_ll_rx_reserve(held,1))) { ble_port_pend(); return; }
+    if(marker && (!held || !ble_ll_rx_reserve(held,1))) {
+        /* Reservation can block before the per-slot loop. Retain that wait
+         * just like ordinary backlog pressure: later IRQ service must use
+         * t_free, and diagnostics must not call the held packet prompt. */
+        for(j=0;j<held;j++) bb.rx_delayed[slots[j]]=1;
+        ble_port_pend(); return;
+    }
     for(j=0;j<held;j++) {
         unsigned slot=slots[j];
         status[j]=BB_F16(BF_RX_STAT+2*slot); header[j]=BB_F16(BF_RX_DATA+2*slot); n[j]=header[j]>>8;
@@ -222,6 +231,8 @@ static void bb_connected_rx(uint32_t stamp,int recovery)
     ble_entropy_sample(0,BB_F32(316),0);
     for(j=0;j<held;j++) {
         unsigned slot=slots[j]; int delayed=recovery || bb.rx_delayed[slot] || held==2;
+        uint8_t flags=(uint8_t)((bb.rx_delayed[slot] ? BLE_RX_PRESSURE : 0) |
+            (held==2 ? BLE_RX_BOTH_FULL : 0) | (recovery ? BLE_RX_RECOVERY : 0));
         uint32_t ts=delayed ? bb.rx_stamp[slot] : stamp;
         if(marker && position==j) { if(!ble_ll_rx_marker(marker)) { ble_ll_close(0x3d); return; } marker=0; }
         if(delayed && has_older && (int32_t)(older-ts)>0) ts=older;
@@ -229,7 +240,7 @@ static void bb_connected_rx(uint32_t stamp,int recovery)
         BB_F16(BF_RX_PTR+2*slot)=(uint16_t)(slot ? BB_RX1 : BB_RX0);
         br_sync(); BB_F8(BF_RX_CTL+slot)&=(uint8_t)~1u; br_sync();
         bb.rx_stamp[slot]=fm1_ticks(); bb.rx_delayed[slot]=0; older=ts; has_older=1;
-        ble_ll_rx_delayed(status[j],header[j],copy[j],ts,event,delayed);
+        ble_ll_rx_slot(status[j],header[j],copy[j],ts,event,delayed,(uint8_t)slot,flags);
     }
     if(marker && !ble_ll_rx_marker(marker)) ble_ll_close(0x3d);
     bb_refill();

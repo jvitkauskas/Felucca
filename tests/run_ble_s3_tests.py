@@ -7,10 +7,31 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import nimble_build as nb
 os.chdir(nb.ROOT)
 s31='--s31' in sys.argv
-out=nb.ROOT/('build/s31-tests' if s31 else 'build/s3-tests');out.mkdir(exist_ok=True,parents=True)
+mic='--mic-stress' in sys.argv
+out=nb.ROOT/('build/mic-tests' if mic else 'build/s31-tests' if s31 else 'build/s3-tests');out.mkdir(exist_ok=True,parents=True)
 cc=os.environ.get('CC','cc')
 common=['-DBLE_HOST_TEST=1','-DFELUCCA_BLE_STAGE=3','-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-fno-builtin-memset','-fno-builtin-memcpy','-fsanitize=address,undefined','-fno-omit-frame-pointer','-fno-pie']
 if s31: common+=['-DFELUCCA_BLE_S31=1']
+if mic:
+    common+=['-DBLE_MIC_RADIO=1',f'-I{out}']
+    # Compile the production S3 HAL RX/refill functions verbatim on a virtual
+    # register bus, rather than a second implementation of their ordering.
+    import re
+    hal=(nb.ROOT/'firmware/hal/fm1_ble.h').read_text()
+    def extract(name):
+        m=re.search(r'^static void '+name+r'\([^;]+?\)\n\{',hal,re.M)
+        assert m,name
+        end=m.end(); depth=1
+        while depth:
+            if hal[end]=='{': depth+=1
+            if hal[end]=='}': depth-=1
+            end+=1
+        return hal[m.start():end]+'\n'
+    (out/'hal_mic_seam.inc').write_text(extract('bb_refill_limit')+
+        'static void bb_refill(void) { bb_refill_limit(2); }\n'+extract('bb_connected_rx'))
+    diag=(nb.ROOT/'firmware/src/ble_console.c').read_text()
+    (out/'mic_dump_seam.inc').write_text(diag[diag.index('static void con_ble_mic_dump(void)'):
+        diag.index('\n#endif',diag.index('static void con_ble_mic_dump(void)'))].replace('con_ble_mic_dump','open_ble_mic_dump').replace('con_','ob_'))
 def compile(p,flags=()):
     obj=out/(str(p).replace('/','_')+'.o')
     subprocess.run([cc,*common,*flags,'-c',str(p),'-o',str(obj)],check=True)
@@ -24,6 +45,10 @@ base=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('b
 sim=[compile(Path('tests')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_s2_sim','ble_s3_sim')]
 vendor=[compile(p,[*nb.flags(),"-Wno-old-style-declaration",*(['-fno-sanitize=shift-base'] if p.name=='aes_encrypt.c' else [])]) for p in nb.sources()]
 port=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('ble_npl','ble_host')]
+if mic:
+    run('mic-stress',[*base,*sim,*vendor,*port,compile(Path('tests/ble_mic_stress.c'),nb.flags(vendor=False))],
+        [os.environ.get('BLE_MIC_EVENTS','10000000')])
+    sys.exit(0)
 run('logic',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s3_test.c'),nb.flags(vendor=False))])
 run('s2-regression',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s2_integration.c'),nb.flags(vendor=False))])
 run('connection-updates', [*base,*sim,*vendor,*port,compile(Path('tests/ble_conn_update_test.c'),nb.flags(vendor=False))])

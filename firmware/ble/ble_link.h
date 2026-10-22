@@ -102,6 +102,8 @@ int ble_ll_create(const ble_conn_t *c,uint32_t now);
 int ble_ll_rx_room(void);
 int ble_ll_rx_marker(uint8_t marker);
 int ble_ll_rx_delayed(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,int delayed);
+int ble_ll_rx_slot(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event,
+                   int delayed,uint8_t slot,uint8_t flags);
 int ble_ll_rx(uint16_t status,uint16_t header,const uint8_t *data,uint32_t stamp,uint16_t event);
 void ble_ll_event(uint16_t event,uint32_t now);
 void ble_ll_worker(void);
