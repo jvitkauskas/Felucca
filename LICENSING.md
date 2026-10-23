@@ -78,7 +78,9 @@ Every distribution of a package carries the licence texts with it: the release f
 
 The firmware links no vendor object code or Bluetooth library. With the default build, the
 packages hold Felucca and the three SDK files above. The optional BLE build also contains
-numerical radio configuration tables transcribed from the frozen clean-room specification;
+numerical radio configuration tables transcribed from the frozen clean-room specification
+(JieLi SDK values: one SDK source table, the rest constant data of the SDK's compiled radio
+libraries, read by the specification side);
 see `docs/BLE-S1.md` for the precise provenance and its unresolved redistribution policy. The installer's
 "Return to official V15" holds only the official file's size and SHA-256: you select the
 official firmware file you downloaded yourself, and it is checked and installed in your browser,
@@ -132,7 +134,11 @@ Not covered by the MIT grant:
 - the changes the BLE work made to existing Felucca files (for example `main.c`,
   `console.c`, `app.ld`): those files stay GPL-3.0-only;
 - `firmware/hal/fm1_ble_tables.h`: numerical radio configuration tables transcribed from
-  the clean-room specification. Their redistribution policy is unresolved (see "No vendor
-  material" and `docs/BLE-S1.md`), so the file keeps its GPL-3.0-only header and no
-  further rights are granted for it;
+  the clean-room specification. The values themselves are JieLi AC79 SDK data: `br_seq` is
+  SDK source (`wl_rfd_ram_lut`), and the other tables are constant data of the SDK's compiled
+  Bluetooth controller and Wi-Fi RF library. The specification side read them from an
+  SDK-built image; the file's author read no vendor binary (the file header lists each
+  table's source). Their redistribution policy is unresolved (see "No vendor material" and
+  `docs/BLE-S1.md`), so the file keeps its GPL-3.0-only header and no further rights are
+  granted for it;
 - the vendored Apache NimBLE (Apache-2.0) and TinyCrypt (BSD-3-Clause) sources above.

@@ -61,7 +61,7 @@ package hashes match the pre-change build exactly.
 | `firmware/ble/ble_s1.h`, `ble_memory.h` | Stage API, static types, callback and storage bounds; 04 §§0.2,6,10 |
 | `firmware/ble/ble_logic.c` | CRC-16/XMODEM, bounded read-only item log, identity, parameter validation, channel table, frame and PDU construction; 01 §§2.1–2.2,4.7; 02 §§3,5.3,6.2; 03 §3.5; 04 §7 |
 | `firmware/ble/ble_controller.c` | Copied H4 command FIFO, CC events, masks, Reset, advertising state, finite internal host and 512-record trace; 03 §§1–5; 04 §10; 05 §2.4 |
-| `firmware/hal/fm1_ble_tables.h` | Numeric facts from 01 A.1, 24 MHz A.2, A.3.1–5, A.4, A.6; ordered duplicates preserved |
+| `firmware/hal/fm1_ble_tables.h` | Numeric facts from 01 A.1, 24 MHz A.2, A.3.1–5, A.4, A.6; ordered duplicates preserved. The values are JieLi SDK data (A.2 is SDK source, the rest constants of the compiled radio libraries, read by the specification side); see the file header |
 | `firmware/hal/fm1_ble_radio.h` | Full shared radio recipe, quick trim/self-calibration, bounded ports, sequencer, modem/AGC, clock/PMU probes; 01 §§2–8,4.13; 04 §0.4/§0.5 |
 | `firmware/hal/fm1_ble.h` | Dedicated DMA memory, width-specific frame access, barriers, anchor port, both IRQ bodies, advertising stop/restart/quarantine; 02 §§2–7,9; 04 §0 |
 | `firmware/hal/fm1_isr.S` | Conditional BLE entry/return wrappers; 04 §0.6 |
