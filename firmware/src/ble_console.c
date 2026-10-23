@@ -19,6 +19,11 @@ static void con_ble_field(const char *name,uint32_t value)
     con_putc(' '); con_puts(name); con_putc(' '); con_dec((int32_t)value);
 }
 #if FELUCCA_BLE_STAGE >= 3 && FM1B_BLE_DIAG
+#define BRD_STACK_EVENT 1
+#define BRD_PUTS con_puts
+#define BRD_DEC con_dec
+#define BRD_HEX con_hex
+#include "../ble/ble_radio_dump.inc"
 static void con_ble_mic_dump(void)
 {
     /* Snapshot before USB output yields: failures cannot tear a readout. */
@@ -61,6 +66,7 @@ static void con_ble_status(void)
 {
 #if FELUCCA_BLE_STAGE >= 3 && FM1B_BLE_DIAG
     con_ble_mic_dump();
+    ble_radio_dump();
 #endif
     ble_hw_diag_t hw;
     ble_diag_t d;

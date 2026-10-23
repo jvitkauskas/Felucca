@@ -1,0 +1,19 @@
+independent central CCM: both directions, lengths 1..27, high counters, corrupted tags rejected: PASS
+ping interval=12 events=1000000 requests=141210 replies=141210 writes=71358 central_repeats=63141 peripheral_repeats=10977 crc=11759 empty_pending_loads=141210 zero MIC failures
+ping interval=12 events=2000000 requests=282399 replies=282399 writes=142775 central_repeats=126817 peripheral_repeats=21944 crc=23553 empty_pending_loads=282399 zero MIC failures
+ping interval=12 events=3000000 requests=423528 replies=423528 writes=214033 central_repeats=190797 peripheral_repeats=33028 crc=35450 empty_pending_loads=423528 zero MIC failures
+ping interval=12 events=4000000 requests=564741 replies=564741 writes=285116 central_repeats=253848 peripheral_repeats=43962 crc=47151 empty_pending_loads=564741 zero MIC failures
+ping interval=12 events=5000000 requests=705930 replies=705929 writes=356540 central_repeats=317456 peripheral_repeats=54981 crc=59002 empty_pending_loads=705930 zero MIC failures
+Traceback (most recent call last):
+  File "/root/fm1/Felucca-ble/tests/run_ble_s3_tests.py", line 49, in <module>
+    run('mic-stress',[*base,*sim,*vendor,*port,compile(Path('tests/ble_mic_stress.c'),nb.flags(vendor=False))],
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        [os.environ.get('BLE_MIC_EVENTS','10000000')])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/fm1/Felucca-ble/tests/run_ble_s3_tests.py", line 43, in run
+    subprocess.run([str(exe),*args],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/root/fm1/Felucca-ble/build/mic-tests/mic-stress', '10000000']' died with <Signals.SIGTERM: 15>.

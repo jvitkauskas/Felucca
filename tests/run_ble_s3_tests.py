@@ -48,6 +48,7 @@ port=[compile(Path('firmware/ble')/(n+'.c'),nb.flags(vendor=False)) for n in ('b
 if mic:
     run('mic-stress',[*base,*sim,*vendor,*port,compile(Path('tests/ble_mic_stress.c'),nb.flags(vendor=False))],
         [os.environ.get('BLE_MIC_EVENTS','10000000')])
+    subprocess.run([str(out/'mic-stress'),'--trace-timeout'],check=True)
     sys.exit(0)
 run('logic',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s3_test.c'),nb.flags(vendor=False))])
 run('s2-regression',[*base,*sim,*vendor,*port,compile(Path('tests/ble_s2_integration.c'),nb.flags(vendor=False))])
