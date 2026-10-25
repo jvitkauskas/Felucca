@@ -489,3 +489,21 @@ has not been flashed or bench-qualified.
 5. Scriptable-central H-22..H-25, A9 sniffer/termination provenance, D-1 RF-tail,
    cumulative interrupt masking and range/temperature qualification remain
    the existing hardware checklist; native tests do not replace them.
+
+## R8 persistence limitation
+
+Felucca still has the disconnect-only bond journal. Its flash driver disables
+interrupts and removes XIP; the frozen r8 platform section 0.9 forbids live
+writes. Do not unplug a newly paired keyboard until the link has actually
+closed and the bond pending flag has cleared. macOS Audio MIDI Setup's
+Disconnect button may keep the underlying BLE link alive.
+
+fm1-base's opt-in `r8-sram-store` branch uses a complete SRAM runtime (code
+and constants, all interrupt handlers) to keep radio, audio and MIDI running
+during OBJ_BLE writes. The owner did not merge it; the R8B candidate also
+retains idle-only persistence. That mechanism does not fit Felucca: the existing S3.1c target report has a
+527,036-byte image, 97,064 bytes of static RAM, a 331,108-byte pool, and only
+1,132 bytes unused beside the RAM code/trace. The runtime cannot be copied
+into the remaining SRAM. The live-write gate therefore stays closed here;
+no unsafe connected-write workaround or destructive journal conversion was
+introduced. A failed idle flush now retains its pending retry flag.

@@ -224,8 +224,15 @@ int main(int argc,char **argv)
         assert(ble_host_midi_take(&pkt,&ts) && pkt==0x643c9009);
         ble_host_midi_out(pkt,8191); pump(); assert(att[0]==0x1b && ble_get16(att+1)==value && att[3]==0xbf && att[4]==0xff);
     }
+    /* A failed first idle save must be retried by the host, with no new
+     * disconnect or bond write to re-arm the pending flag. */
+    ble_bonds_get_diag(&bond); assert(bond.pending && !bond.writes);
+    sim_flash_fault=BLE_FLASH_NOT_ISSUED;
     disconnect_link();
-    ble_bonds_get_diag(&bond); assert(!bond.pending && bond.writes && !bond.failures);
+    ble_bonds_get_diag(&bond); assert(bond.pending && bond.failures && !bond.writes);
+    sim_flash_fault=0; pump();
+    ble_bonds_get_diag(&bond); assert(!bond.pending && bond.writes && bond.failures);
+    puts("R8B host idle flush: failed disconnect save stays pending; worker retries without another disconnect/write: PASS");
     /* Reconstruct the RAM cache from the NOR journal (simulated reboot of
      * store, not a second NimBLE init) and encrypt with its persistent LTK. */
     ble_bonds_init();

@@ -321,7 +321,8 @@ void ble_host_worker(void)
     }
 #if FELUCCA_BLE_STAGE >= 3
     if(bond_flush_due && diag.connection==BLE_HS_CONN_HANDLE_NONE && ble_port_storage_idle()) {
-        ble_bonds_flush(); bond_flush_due=0;
+        ble_bond_diag_t bond;
+        ble_bonds_flush(); ble_bonds_get_diag(&bond); bond_flush_due=bond.pending;
     }
     if(security_due && (int32_t)(now-security_at)>=0 && diag.connection!=BLE_HS_CONN_HANDLE_NONE) {
         struct ble_gap_conn_desc desc; ble_security_diag_t enc; int rc;

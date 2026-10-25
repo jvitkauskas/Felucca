@@ -1,0 +1,13 @@
++ python3 tests/run_ble_s3_tests.py
+S3 AES/Core CCM, negative MIC/counter/LLID, seed parsing/wrap/conflicts/wear/failures, deferred persistent bonds, encryption phase/marker/barrier/exhaustion tests: PASS
+NimBLE 1.9.0 integration: startup, GATT discovery/empty read/CCCD, bidirectional MIDI, fragmented ACL, update, 10-minute simulated link, 10 reconnects, backstop timeout: PASS
+heap peak 784; HCI credits 5; MIDI packets in 3 out 2; controller control PDUs 22
+central update matrix: 48 cases + 48 immediate updates, near/far, tick wrap, WinOffset 0/mid/max, WinSize 1/max: PASS
+invalid NEW-interval limits ignored; busy/length diagnostics; both late kinds/missing-close watchdog and I-1 receipt: PASS
+map/update pending and programmed: 7 closing causes, supervision expiry, reconnect timing/epoch/queues clean: PASS
+600-second event grid crosses stale-first half-wrap and multiple tick wraps with no frozen counters: PASS
+12 encrypted central interval changes, WinOffset 0/mid/max and maximum WinSize, real CCM/ordered control path: PASS
+R8B host idle flush: failed disconnect save stays pending; worker retries without another disconnect/write: PASS
+NimBLE legacy Just Works: real SMP, HCI LTK, CCM link, key size 16, persistent bond reconnect, MTU 200, encrypted MIDI both directions, MIC failure: PASS; LE Rand 6, heap peak 784
+R8B host idle flush: failed disconnect save stays pending; worker retries without another disconnect/write: PASS
+NimBLE SC Just Works: real SMP, HCI LTK, CCM link, key size 16, persistent bond reconnect, MTU 200, encrypted MIDI both directions, MIC failure: PASS; LE Rand 10, heap peak 784

@@ -1,5 +1,10 @@
 # Felucca
 
+> **Branch `ble-controller` is frozen** (2026-10-25): the open BLE controller here stops at round 6 plus
+> the round 8 bond-write retry fix. Development continues in fm1-base
+> ([jvitkauskas/fm1-base](https://github.com/jvitkauskas/fm1-base), branch `open-ble`): round 7 diagnostics,
+> NimBLE 1.10 and later work are only there.
+
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/hugelton)
 
